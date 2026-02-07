@@ -4,6 +4,7 @@
 
 #include <wrl/client.h>
 #include <stdexcept>
+#include <array>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -14,6 +15,10 @@ using Microsoft::WRL::ComPtr;
 static const wchar_t* windowClassName = L"DirectX11-study";
 static const int clientWidth = 1280;
 static const int clientHeight = 720;
+
+// クリアカラー（参照渡し学習用）
+using Color4 = std::array<float, 4>;
+static const Color4 clearColor = { 0.05f, 0.15f, 0.35f, 1.0f };
 
 // COMオブジェクトの構造体
 struct Dx11Context
@@ -49,6 +54,12 @@ static void CreateRenderTarget()
         g_dx.device->CreateRenderTargetView(backBuffer.Get(), nullptr, g_dx.rtv.ReleaseAndGetAddressOf()),
         "CreateRenderTargetView failed"
     );
+}
+
+// 画面クリア（参照渡し）
+static void ClearRTV(const Color4& color)
+{
+    g_dx.context->ClearRenderTargetView(g_dx.rtv.Get(), color.data());
 }
 
 // 初期化処理
@@ -129,9 +140,7 @@ static void Render()
     ID3D11RenderTargetView* rtvs[] = { g_dx.rtv.Get() };
     g_dx.context->OMSetRenderTargets(1, rtvs, nullptr);
 
-    // クリアカラー
-    const float clear[4] = { 0.05f, 0.15f, 0.35f, 1.0f };
-    g_dx.context->ClearRenderTargetView(g_dx.rtv.Get(), clear);
+    ClearRTV(clearColor);
 
     // Present
     g_dx.swapChain->Present(1, 0);
