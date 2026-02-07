@@ -32,3 +32,25 @@
 
 　　コンソールからWindowsに変更して解決（エントリーポイントをwWinMainにするため）
 
+
+
+\## Learning
+
+\- RALL(Resource Acquisition Is Initialization)
+
+　　DirectXはリソースが多いためスコープを出ると自動でReleaseされるstd::vector、ComPtrの利用が必須（ComPtrは参照カウント管理）
+
+　　例外が起こった場合でも安全。
+
+　　その他Rall型（std::unique\_ptr, std::shared\_ptr, std::stringなど）
+
+\- ComPtrの操作
+
+　　.Get() は生ポインタを借りる処理。所有権は渡さない
+
+　　.Reset() は持っている参照を外す処理。明示的に開放する際や依存関係を切るときに利用。
+
+　　IID\_PPV\_ARGS(\&comPtr) は生成APIに渡す際の正しい書き方。出力先（2重ポインタ）を渡すため
+
+　　.GetAddressOf(), .ReleaseAndGetAddressOb() は2重ポインタを渡す正しい書き方
+
