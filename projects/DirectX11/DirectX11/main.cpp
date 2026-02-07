@@ -1,7 +1,3 @@
-// main.cpp : DirectX11 minimal "clear color" sample (Win32 + D3D11)
-// Build: Debug|x64 recommended
-// Link: d3d11.lib, dxgi.lib, d3dcompiler.lib
-
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -11,14 +7,15 @@
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
-// #pragma comment(lib, "d3dcompiler.lib") // optional
+#pragma comment(lib, "d3dcompiler.lib")
 
 using Microsoft::WRL::ComPtr;
 
-static const wchar_t* kWndClassName = L"Week0_DX11_Clear_Window";
-static const int kClientWidth = 1280;
-static const int kClientHeight = 720;
+static const wchar_t* windowClassName = L"DirectX11-study";
+static const int clientWidth = 1280;
+static const int clientHeight = 720;
 
+// COMオブジェクトの構造体
 struct Dx11Context
 {
     ComPtr<ID3D11Device>           device;
@@ -29,6 +26,7 @@ struct Dx11Context
 
 static Dx11Context g_dx;
 
+// 例外処理
 static void ThrowIfFailed(HRESULT hr, const char* msg)
 {
     if (FAILED(hr))
@@ -37,27 +35,28 @@ static void ThrowIfFailed(HRESULT hr, const char* msg)
     }
 }
 
+// レンダーターゲット作成
 static void CreateRenderTarget()
 {
-    g_dx.rtv.Reset();
-
     ComPtr<ID3D11Texture2D> backBuffer;
+
     ThrowIfFailed(
         g_dx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer)),
         "GetBuffer(backBuffer) failed"
     );
 
     ThrowIfFailed(
-        g_dx.device->CreateRenderTargetView(backBuffer.Get(), nullptr, &g_dx.rtv),
+        g_dx.device->CreateRenderTargetView(backBuffer.Get(), nullptr, g_dx.rtv.ReleaseAndGetAddressOf()),
         "CreateRenderTargetView failed"
     );
 }
 
+// 初期化処理
 static void InitD3D11(HWND hwnd)
 {
     DXGI_SWAP_CHAIN_DESC sd{};
-    sd.BufferDesc.Width = kClientWidth;
-    sd.BufferDesc.Height = kClientHeight;
+    sd.BufferDesc.Width = clientWidth;
+    sd.BufferDesc.Height = clientHeight;
     sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     sd.BufferDesc.RefreshRate.Numerator = 60;
     sd.BufferDesc.RefreshRate.Denominator = 1;
@@ -66,10 +65,10 @@ static void InitD3D11(HWND hwnd)
     sd.SampleDesc.Quality = 0;
 
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.BufferCount = 2;                 // double buffer
+    sd.BufferCount = 2;
     sd.OutputWindow = hwnd;
     sd.Windowed = TRUE;
-    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // widely compatible
+    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
     sd.Flags = 0;
 
     UINT createFlags = 0;
@@ -87,32 +86,32 @@ static void InitD3D11(HWND hwnd)
     D3D_FEATURE_LEVEL createdFL = D3D_FEATURE_LEVEL_11_0;
 
     HRESULT hr = D3D11CreateDeviceAndSwapChain(
-        nullptr,                    // adapter (nullptr = default)
-        D3D_DRIVER_TYPE_HARDWARE,   // hardware GPU
+        nullptr,
+        D3D_DRIVER_TYPE_HARDWARE,
         nullptr,
         createFlags,
         featureLevels,
         _countof(featureLevels),
         D3D11_SDK_VERSION,
         &sd,
-        &g_dx.swapChain,
-        &g_dx.device,
+        g_dx.swapChain.ReleaseAndGetAddressOf(),
+        g_dx.device.ReleaseAndGetAddressOf(),
         &createdFL,
-        &g_dx.context
+        g_dx.context.ReleaseAndGetAddressOf()
     );
     ThrowIfFailed(hr, "D3D11CreateDeviceAndSwapChain failed");
 
     CreateRenderTarget();
 }
 
+// 画面の大きさ変更
 static void Resize(UINT width, UINT height)
 {
     if (!g_dx.swapChain) return;
-    if (width == 0 || height == 0) return; // minimized
+    if (width == 0 || height == 0) return;
 
     g_dx.rtv.Reset();
 
-    // 0,0 => keep buffer count/format
     ThrowIfFailed(
         g_dx.swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0),
         "ResizeBuffers failed"
@@ -121,22 +120,24 @@ static void Resize(UINT width, UINT height)
     CreateRenderTarget();
 }
 
+// 描画処理
 static void Render()
 {
     if (!g_dx.context || !g_dx.rtv) return;
 
-    // Set RTV
+    // RTVセット
     ID3D11RenderTargetView* rtvs[] = { g_dx.rtv.Get() };
     g_dx.context->OMSetRenderTargets(1, rtvs, nullptr);
 
-    // Clear color (RGBA)
+    // クリアカラー
     const float clear[4] = { 0.05f, 0.15f, 0.35f, 1.0f };
     g_dx.context->ClearRenderTargetView(g_dx.rtv.Get(), clear);
 
     // Present
-    g_dx.swapChain->Present(1, 0); // vsync on
+    g_dx.swapChain->Present(1, 0);
 }
 
+// ウィンドウプロシージャ
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)
@@ -156,26 +157,27 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 }
 
+// エントリーポイント
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nCmdShow)
 {
     try
     {
-        // Register window class
+        // Register window クラス
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
         wc.style = CS_HREDRAW | CS_VREDRAW;
         wc.lpfnWndProc = WndProc;
         wc.hInstance = hInst;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.lpszClassName = kWndClassName;
+        wc.lpszClassName = windowClassName;
         RegisterClassExW(&wc);
 
-        // Create window
-        RECT rc{ 0, 0, kClientWidth, kClientHeight };
+        // ウィンドウ作成
+        RECT rc{ 0, 0, clientWidth, clientHeight };
         AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
         HWND hwnd = CreateWindowExW(
-            0, kWndClassName, L"Week0 DX11 Clear",
+            0, windowClassName, L"Week0 DX11 Clear",
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT, CW_USEDEFAULT,
             rc.right - rc.left, rc.bottom - rc.top,
@@ -186,10 +188,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nCmdShow)
         ShowWindow(hwnd, nCmdShow);
         UpdateWindow(hwnd);
 
-        // Init D3D11
+        // D3D11初期化
         InitD3D11(hwnd);
 
-        // Main loop
+        // メインループ
         MSG msg{};
         while (msg.message != WM_QUIT)
         {
