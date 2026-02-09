@@ -5,6 +5,7 @@
 #include <wrl/client.h>
 #include <stdexcept>
 #include <array>
+#include <vector>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -30,6 +31,39 @@ struct Dx11Context
 };
 
 static Dx11Context g_dx;
+
+
+// 頂点配列
+struct Vertex {
+    float x, y, z;
+    float r, g, b, a;
+};
+// 三角形の頂点データ（学習用）
+std::vector<Vertex> MakeTriangle()
+{
+    return {
+        { 0.0f,  0.5f, 0.0f, 1,0,0,1 },
+        { 0.5f, -0.5f, 0.0f, 0,1,0,1 },
+        {-0.5f, -0.5f, 0.0f, 0,0,1,1 },
+    };
+}
+
+// データをひとまとめにした構造体
+template<class T>
+struct BufferView
+{
+    const T* data = nullptr;
+    size_t count = 0;
+    size_t bytes = 0;
+    size_t stride = sizeof(T);
+};
+// バッファデータ
+template<class T>
+static BufferView<T> MakeView(const std::vector<T>& v)
+{
+    return { v.data(), v.size(), sizeof(T) * v.size(), sizeof(T)};
+}
+
 
 // 例外処理
 static void ThrowIfFailed(HRESULT hr, const char* msg)
@@ -199,6 +233,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nCmdShow)
 
         // D3D11初期化
         InitD3D11(hwnd);
+
+        // 頂点データ作成、データ確認（学習用）
+        auto vertices = MakeTriangle();
+        auto view = MakeView(vertices);
+
 
         // メインループ
         MSG msg{};
