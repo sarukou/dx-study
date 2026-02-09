@@ -92,5 +92,10 @@
 
 　　とCPU側で「境界を揃えるための隙間（パディング）」が入りsizeof(T) が増えることがある。
 
-　　
+- World & View & Projection
 
+　　モデルの頂点の座標はモデル自身の基準（Local）、モデルを世界に置いた座標（World）、カメラから見た座標（View）、遠近法で画面に映る形（Projection）の順で変換される。
+
+　　変換にWorld行列、View行列、Projection行列を掛け合わせる。まとめてWVP行列。
+
+　　GPU（Vertex Shader）でLocalで入ってきた座標をWVPをかけて画面に映る座標に変換される。
