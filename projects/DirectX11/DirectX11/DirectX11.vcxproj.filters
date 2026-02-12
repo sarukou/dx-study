@@ -19,4 +19,11 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="shaders\BasicVertexShader.hlsl" />
+    <FxCompile Include="shaders\BasicPixelShader.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\BasicShader.hlsli" />
+  </ItemGroup>
 </Project>

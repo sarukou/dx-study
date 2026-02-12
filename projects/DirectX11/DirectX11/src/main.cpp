@@ -7,6 +7,7 @@
 
 #include <string>
 
+
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -31,6 +32,16 @@ struct Dx11Context
     ComPtr<ID3D11RenderTargetView> renderTargetView;    // 書き込み先の窓口（バックバッファに直接は書かず View を作ってOMに渡す）
 };
 
+// 頂点情報（CPU→GPUに渡す形）
+struct Vertex
+{
+    float x, y, z;      // POSITION
+    float r, g, b, a;   // COLOR
+};
+
+
+// ウィンドウハンドル
+HWND g_hWnd;
 
 // 例外処理
 static void ThrowIfFailed(HRESULT hr, const char* msg)
@@ -39,6 +50,65 @@ static void ThrowIfFailed(HRESULT hr, const char* msg)
         throw std::runtime_error(msg);
     }
 }
+
+// ウィンドウプロシージャ
+static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg) {
+    case WM_CREATE: {
+        const auto createStruct = reinterpret_cast<LPCREATESTRUCTW>(lParam);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
+        return 0;
+    }
+    case WM_CLOSE:
+        if (MessageBoxW(hwnd, L"保存していないデータは破棄されます。", L"ゲームを終了しますか？", MB_YESNO) == IDYES) {
+            DestroyWindow(hwnd);
+        }
+        return 0;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    default:
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+}
+
+
+// ウィンドウ初期化
+static void InitWindow(HINSTANCE hInstance, int nCmdShow, const ProjectSettings& settings)
+{
+    // ウィンドウクラス登録（見た目や挙動のウィンドウを作ると OS に申請）
+    WNDCLASSEXW windowClass = {};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;    // 描画の再要求方針（縦・横サイズ変更されたら描き直す）
+    windowClass.lpfnWndProc = WndProc;
+    windowClass.cbClsExtra = 0;         // クラスに追加する余分なメモリ領域サイズ
+    windowClass.cbWndExtra = 0;         // ウィンドウインスタンスに追加する余分な領域
+    windowClass.hInstance = hInstance;  // 実行モジュール（EXE/DLL）のインスタンスハンドル
+    windowClass.hIcon = NULL;
+    windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
+    windowClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);     // 背景を塗るブラシ
+    windowClass.lpszMenuName = NULL;                            // メニューリソース名
+    windowClass.lpszClassName = settings.title.c_str();         // ウィンドウクラス名（タイトルと同じだが概念的には別物）
+
+    // ウィンドウクラスを OS に登録
+    RegisterClassExW(&windowClass);
+
+    // ウィンドウ作成（クライアント領域を Width * Height にしたいから枠分を足し引き）
+    RECT rect{ 0, 0, settings.width, settings.height };
+    AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
+
+    g_hWnd = CreateWindowExW(0, windowClass.lpszClassName, L"DirectX11-study",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+        rect.right - rect.left, rect.bottom - rect.top,
+        nullptr, nullptr, hInstance, nullptr);
+
+    if (!g_hWnd) return;
+
+    ShowWindow(g_hWnd, nCmdShow);
+    UpdateWindow(g_hWnd);
+}
+
 
 // 初期化処理
 static void InitD3D11(HWND hwnd, const ProjectSettings& settings, Dx11Context& dx)
@@ -113,72 +183,48 @@ static void InitD3D11(HWND hwnd, const ProjectSettings& settings, Dx11Context& d
 }
 
 
-// ウィンドウプロシージャ
-static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+// VertexBuffer 作成
+ComPtr<ID3D11Buffer> g_vertexBuffer;
+static void CreateVertexBuffer(ID3D11Device* device)
 {
-    switch (msg) {
-    case WM_CREATE: {
-        const auto createStruct = reinterpret_cast<LPCREATESTRUCTW>(lParam);
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
-        return 0;
-    }
-    case WM_CLOSE:
-        if (MessageBoxW(hwnd, L"保存していないデータは破棄されます。", L"ゲームを終了しますか？", MB_YESNO) == IDYES) {
-            DestroyWindow(hwnd);
-        }
-        return 0;
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-    default:
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
-    }
+    // 頂点情報指定
+    Vertex vertices[] =
+    {
+        {  0.0f,  0.5f, 0.0f,  1,0,0,1 }, // 上：赤
+        {  0.5f, -0.5f, 0.0f,  0,1,0,1 }, // 右下：緑
+        { -0.5f, -0.5f, 0.0f,  0,0,1,1 }, // 左下：青
+    };
+
+    // 各設定（どんな用途・性質）
+    D3D11_BUFFER_DESC bufferDesc = {};
+    bufferDesc.ByteWidth = sizeof(vertices);            // バッファーサイズ（バイト数）
+    bufferDesc.Usage = D3D11_USAGE_DEFAULT;             // バッファの使われ方（今回は「 GPU が主に使う」）
+    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;    // このバッファを何としてパイプラインにバインドするか
+    bufferDesc.CPUAccessFlags = 0;                      // CPU がこのバッファにアクセスできるか（ 0 はできない）
+    bufferDesc.MiscFlags = 0;                           // 特殊な用途の追加フラグ（なし）
+    bufferDesc.StructureByteStride = 0;                 // 特殊フラグの要素サイズ（使わないのでもちろんなし）
+
+    ThrowIfFailed(device->CreateBuffer(&bufferDesc, nullptr, &g_vertexBuffer), "Create Vertex Buffer Failed");
 }
+
 
 // エントリーポイント
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
+    static const ProjectSettings settings = {
+                .title = L"DirectX11-study",
+                .width = 1280,
+                .height = 720
+    };
+    Dx11Context dx = {};
+
+
     try {
-        static const ProjectSettings settings = {
-            .title = L"DirectX11-study",
-            .width = 1280,
-            .height = 720
-        };
-        Dx11Context dx = {};
-
-        // ウィンドウクラス登録（見た目や挙動のウィンドウを作ると OS に申請）
-        WNDCLASSEXW windowClass = {};
-        windowClass.cbSize = sizeof(windowClass);
-        windowClass.style = CS_HREDRAW | CS_VREDRAW;    // 描画の再要求方針（縦・横サイズ変更されたら描き直す）
-        windowClass.lpfnWndProc = WndProc;
-        windowClass.cbClsExtra = 0;         // クラスに追加する余分なメモリ領域サイズ
-        windowClass.cbWndExtra = 0;         // ウィンドウインスタンスに追加する余分な領域
-        windowClass.hInstance = hInstance;  // 実行モジュール（EXE/DLL）のインスタンスハンドル
-        windowClass.hIcon = NULL;
-        windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
-        windowClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);     // 背景を塗るブラシ
-        windowClass.lpszMenuName = NULL;                            // メニューリソース名
-        windowClass.lpszClassName = settings.title.c_str();         // ウィンドウクラス名（タイトルと同じだが概念的には別物）
-        
-        // ウィンドウクラスを OS に登録
-        RegisterClassExW(&windowClass);
-
-        // ウィンドウ作成（クライアント領域を Width * Height にしたいから枠分を足し引き）
-        RECT rect{ 0, 0, settings.width, settings.height };
-        AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-
-        HWND hwnd = CreateWindowExW(0, windowClass.lpszClassName, L"DirectX11-study",
-            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-            rect.right - rect.left, rect.bottom - rect.top,
-            nullptr, nullptr, hInstance, nullptr);
-
-        if (!hwnd) return 0;
-
-        ShowWindow(hwnd, nCmdShow);
-        UpdateWindow(hwnd);
+        // ウィンドウ初期化
+        InitWindow(hInstance, nCmdShow, settings);
 
         // D3D11初期化
-        InitD3D11(hwnd, settings, dx);
+        InitD3D11(g_hWnd, settings, dx);
 
         // メインループ（イベントがあるときは処理、それ以外は描画）
         MSG msg{};
