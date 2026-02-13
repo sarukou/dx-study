@@ -5,7 +5,11 @@
 #include <wrl/client.h>
 #include <stdexcept>
 
+#include <iterator>
 #include <string>
+
+#include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
+#include "BasicPixelShader.h"
 
 
 #pragma comment(lib, "d3d11.lib")
@@ -37,6 +41,13 @@ struct Vertex
 {
     float x, y, z;      // POSITION
     float r, g, b, a;   // COLOR
+};
+
+// シェーダー構造体
+struct Shaders
+{
+    ComPtr<ID3D11VertexShader> vertexShader;
+    ComPtr<ID3D11PixelShader> pixelShader;
 };
 
 
@@ -160,15 +171,16 @@ static void InitD3D11(HWND hwnd, const ProjectSettings& settings, Dx11Context& d
         &createdFeatureLevel,
         dx.deviceContext.ReleaseAndGetAddressOf()
     );
-
-    ThrowIfFailed(hr, "D3D11CreateDeviceAndSwapChain failed");
+    ThrowIfFailed(hr, "D3D11CreateDeviceAndSwapChain Failed");
 
     // SwapChain が内部に持っているバックバッファを取り出す
     ComPtr<ID3D11Texture2D> backBuffer;
-    dx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+    hr = dx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+    ThrowIfFailed(hr, "Get BackBuffer Failed");
 
     // RenderTargetView 作成（バックバッファに対して書き込める窓口）
-    dx.device->CreateRenderTargetView(backBuffer.Get(), nullptr, dx.renderTargetView.ReleaseAndGetAddressOf());
+    hr = dx.device->CreateRenderTargetView(backBuffer.Get(), nullptr, dx.renderTargetView.ReleaseAndGetAddressOf());
+    ThrowIfFailed(hr, "Create RenderTargetView Failed");
 
     // OM に出力先（RTV）を設定
     dx.deviceContext->OMSetRenderTargets(1, dx.renderTargetView.GetAddressOf(), nullptr);
@@ -204,9 +216,73 @@ static void CreateVertexBuffer(ID3D11Device* device)
     bufferDesc.MiscFlags = 0;                           // 特殊な用途の追加フラグ（なし）
     bufferDesc.StructureByteStride = 0;                 // 特殊フラグの要素サイズ（使わないのでもちろんなし）
 
-    ThrowIfFailed(device->CreateBuffer(&bufferDesc, nullptr, &g_vertexBuffer), "Create Vertex Buffer Failed");
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem = vertices;
+
+    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, &g_vertexBuffer), "Create Vertex Buffer Failed");
 }
 
+// VertexShader/PixelShader 作成
+static void CreateShaders(Shaders& shaders, Dx11Context& dx)
+{
+    // VertexShader
+    HRESULT hr = dx.device->CreateVertexShader(
+        g_BasicVertexShader, std::size(g_BasicVertexShader), NULL, shaders.vertexShader.GetAddressOf());
+    ThrowIfFailed(hr, "Create VertexShader Failed");
+
+    // PixelShader
+    hr = dx.device->CreatePixelShader(
+        g_BasicPixelShader, std::size(g_BasicPixelShader), NULL, shaders.pixelShader.GetAddressOf());
+    ThrowIfFailed(hr, "Create PixelShader Failed");
+}
+
+// InputLayout 作成
+ComPtr<ID3D11InputLayout> g_inputLayout;
+static void CreateInputLayout(ID3D11Device* device)
+{
+    // HLSL ファイルと同じ形式（セマンティクス）
+    D3D11_INPUT_ELEMENT_DESC layout[] =
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+
+    HRESULT hr = device->CreateInputLayout(layout, _countof(layout),
+        g_BasicVertexShader, std::size(g_BasicVertexShader), &g_inputLayout);   // 生成されたヘッダーファイルを利用してバイトコードなどを渡す
+    ThrowIfFailed(hr, "Create InputLayout Failed");
+}
+
+
+// 描画処理（更新）
+static void Render(Dx11Context& dx, Shaders& shaders)
+{
+    // 1) 画面クリア
+    const float clearColor[4] = { 0 / 255.0f, 99 / 255.0f, 181 / 255.0f, 1.0f };
+    dx.deviceContext->ClearRenderTargetView(dx.renderTargetView.Get(), clearColor);
+
+    // 2) 出力先（RTV）をセット
+    dx.deviceContext->OMSetRenderTargets(1,dx.renderTargetView.GetAddressOf(), nullptr);
+
+    // 3) IA（Input Assembler）設定：Layout / VB / Topology
+    dx.deviceContext->IASetInputLayout(g_inputLayout.Get());
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    ID3D11Buffer* vb = g_vertexBuffer.Get();
+    dx.deviceContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+
+    dx.deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
+
+    // 4) シェーダー設定
+    dx.deviceContext->VSSetShader(shaders.vertexShader.Get(), nullptr, 0);
+    dx.deviceContext->PSSetShader(shaders.pixelShader.Get(), nullptr, 0);
+
+    // 5) 描き込み
+    dx.deviceContext->Draw(3, 0);
+
+    // 6) 表示
+    dx.swapChain->Present(1, 0);
+}
 
 // エントリーポイント
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
@@ -217,14 +293,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 .height = 720
     };
     Dx11Context dx = {};
+    Shaders shaders = {};
 
 
     try {
         // ウィンドウ初期化
         InitWindow(hInstance, nCmdShow, settings);
-
         // D3D11初期化
         InitD3D11(g_hWnd, settings, dx);
+        // シェーダー作成
+        CreateShaders(shaders, dx);
+        // インプットレイアウト作成
+        CreateInputLayout(dx.device.Get());
+        // 頂点バッファー作成
+        CreateVertexBuffer(dx.device.Get());
+
 
         // メインループ（イベントがあるときは処理、それ以外は描画）
         MSG msg{};
@@ -237,7 +320,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
             }
             else
             {
-                // 描画処理など
+                Render(dx, shaders);
             }
         }
         return (int)msg.wParam;
