@@ -10,7 +10,7 @@ DX11 で三角形の描画、GPUに何を送っているか説明できる状態
 
 ## Projects
 
-- `projects/DirectX11/DirectX11` : DirectX11 最小（クリア色 + Present）
+- `projects/DirectX11/DirectX11` : DirectX11 三角形表示（クリア色＋シェーダー最小構成）
 
 - `projects/DirectX12/DirectX12` : 
 
