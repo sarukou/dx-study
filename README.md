@@ -7,10 +7,13 @@ DX11 / DX12 の最小表示確認までを再現できる状態にする。
 Week1
 DX11 で三角形の描画、GPUに何を送っているか説明できる状態にする。
 
+Week2
+DX11 でWVP行列、定数バッファを用いて三角形が回転する状態にする。
+
 
 ## Projects
 
-- `projects/DirectX11/DirectX11` : DirectX11 三角形表示（クリア色＋シェーダー最小構成）
+- `projects/DirectX11/DirectX11` : DirectX11 三角形表示（クリア色＋シェーダー最小構成、Y軸回転）
 
 - `projects/DirectX12/DirectX12` : 
 
