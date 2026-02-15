@@ -1,3 +1,11 @@
+cbuffer ConstantBuffer : register(b0)
+{
+    matrix World;                   // ワールド変換行列
+    matrix View;                    // ビュー変換行列
+    matrix Projection;              // 透視射影変換行列
+    matrix WorldViewProjection;     // WVP行列
+}
+
 // 頂点シェーダーの入力データ
 struct VSInput
 {

@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
+#include <DirectXMath.h>
 
 #include <wrl/client.h>
 #include <stdexcept>
@@ -16,7 +17,8 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-using Microsoft::WRL::ComPtr;
+using namespace Microsoft::WRL;
+using namespace DirectX;
 
 
 // プロジェクト設定
@@ -49,6 +51,18 @@ struct Shaders
     ComPtr<ID3D11VertexShader> vertexShader;
     ComPtr<ID3D11PixelShader> pixelShader;
 };
+
+// 定数バッファ用構造体
+struct ConstantPerFrame
+{
+    // WVP 行列
+    DirectX::XMFLOAT4X4 worldMatrix;
+    DirectX::XMFLOAT4X4 viewMatrix;
+    DirectX::XMFLOAT4X4 projectionMatrix;
+    DirectX::XMFLOAT4X4 worldViewProjectionMatrix;
+};
+// デバッグ用
+static_assert((sizeof(ConstantPerFrame) % 16) == 0, "Constant buffer size must be 16-byte aligned.");
 
 
 // ウィンドウハンドル
@@ -211,7 +225,7 @@ static void CreateVertexBuffer(ID3D11Device* device)
     D3D11_BUFFER_DESC bufferDesc = {};
     bufferDesc.ByteWidth = sizeof(vertices);            // バッファーサイズ（バイト数）
     bufferDesc.Usage = D3D11_USAGE_DEFAULT;             // バッファの使われ方（今回は「 GPU が主に使う」）
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;    // このバッファを何としてパイプラインにバインドするか
+    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;    // このバッファを何としてパイプラインにバインドするか（頂点バッファ）
     bufferDesc.CPUAccessFlags = 0;                      // CPU がこのバッファにアクセスできるか（ 0 はできない）
     bufferDesc.MiscFlags = 0;                           // 特殊な用途の追加フラグ（なし）
     bufferDesc.StructureByteStride = 0;                 // 特殊フラグの要素サイズ（使わないのでもちろんなし）
@@ -219,7 +233,22 @@ static void CreateVertexBuffer(ID3D11Device* device)
     D3D11_SUBRESOURCE_DATA initData = {};
     initData.pSysMem = vertices;
 
-    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, &g_vertexBuffer), "Create Vertex Buffer Failed");
+    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_vertexBuffer.GetAddressOf()), "Create Vertex Buffer Failed");
+}
+
+// ConstantBuffer 作成
+ComPtr<ID3D11Buffer> g_constantBuffer;
+static void CreateConstantBuffer(ID3D11Device* device)
+{
+    D3D11_BUFFER_DESC bufferDesc = {};
+    bufferDesc.ByteWidth = sizeof(ConstantPerFrame);
+    bufferDesc.Usage = D3D11_USAGE_DYNAMIC;             // 毎フレーム書き換える
+    bufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;  // 定数バッファ
+    bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE; // CPU から書き込む
+    bufferDesc.MiscFlags = 0;
+    bufferDesc.StructureByteStride = 0;
+
+    ThrowIfFailed(device->CreateBuffer(&bufferDesc, nullptr, g_constantBuffer.GetAddressOf()), "Create Constant Buffer Failed");
 }
 
 // VertexShader/PixelShader 作成
@@ -254,16 +283,44 @@ static void CreateInputLayout(ID3D11Device* device)
 
 
 // 描画処理（更新）
-static void Render(Dx11Context& dx, Shaders& shaders)
+static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& settings, float& time)
 {
-    // 1) 画面クリア
+    // ワールド行列を計算
+    XMMATRIX world = XMMatrixIdentity();
+    world *= XMMatrixScaling(1.0f, 1.0f, 1.0f);
+    world += XMMatrixRotationY(time);
+    world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
+    // ビュー行列を計算
+    XMVECTOR eye = XMVectorSet(0.0f, 0.0f, -2.0f, 1.0f);
+    XMVECTOR at = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+    XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
+    // プロジェクション行列を計算
+    float aspect = (float)settings.width / (float)settings.height;
+    XMMATRIX projection = XMMatrixPerspectiveFovLH(XM_PIDIV4, aspect, 0.1f, 100.0f);
+
+    // 転置して送る
+    ConstantPerFrame constantPerFrame = {};
+    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
+    XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
+    XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
+    XMStoreFloat4x4(& constantPerFrame.worldViewProjectionMatrix,XMMatrixTranspose(world * view * projection));
+
+    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    dx.deviceContext->Map(g_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
+    dx.deviceContext->Unmap(g_constantBuffer.Get(), 0);
+
+
+    // 画面クリア
     const float clearColor[4] = { 0 / 255.0f, 99 / 255.0f, 181 / 255.0f, 1.0f };
     dx.deviceContext->ClearRenderTargetView(dx.renderTargetView.Get(), clearColor);
 
-    // 2) 出力先（RTV）をセット
+    // 出力先（RTV）をセット
     dx.deviceContext->OMSetRenderTargets(1,dx.renderTargetView.GetAddressOf(), nullptr);
 
-    // 3) IA（Input Assembler）設定：Layout / VB / Topology
+    // IA（Input Assembler）設定：Layout / VB / Topology
     dx.deviceContext->IASetInputLayout(g_inputLayout.Get());
 
     UINT stride = sizeof(Vertex);
@@ -273,14 +330,18 @@ static void Render(Dx11Context& dx, Shaders& shaders)
 
     dx.deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
 
-    // 4) シェーダー設定
+    // シェーダー設定
     dx.deviceContext->VSSetShader(shaders.vertexShader.Get(), nullptr, 0);
     dx.deviceContext->PSSetShader(shaders.pixelShader.Get(), nullptr, 0);
 
-    // 5) 描き込み
+    // シェーダーに定数バッファを設定（HLSL 側で register(b0) にしたのでスロット 0 に入れる）
+    ID3D11Buffer* constantBuffers[] = { g_constantBuffer.Get() };
+    dx.deviceContext->VSSetConstantBuffers(0, 1, constantBuffers);
+
+    // 描き込み
     dx.deviceContext->Draw(3, 0);
 
-    // 6) 表示
+    // 表示
     dx.swapChain->Present(1, 0);
 }
 
@@ -305,14 +366,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         CreateShaders(shaders, dx);
         // インプットレイアウト作成
         CreateInputLayout(dx.device.Get());
-        // 頂点バッファー作成
+        // 頂点バッファ作成
         CreateVertexBuffer(dx.device.Get());
+        // 定数バッファ作成
+        CreateConstantBuffer(dx.device.Get());
 
 
         // メインループ（イベントがあるときは処理、それ以外は描画）
+        float time = 0.0f;
         MSG msg{};
         while (msg.message != WM_QUIT)
         {
+            time += 0.016f;
+
             if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
             {
                 TranslateMessage(&msg);
@@ -320,7 +386,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
             }
             else
             {
-                Render(dx, shaders);
+                Render(dx, shaders, settings, time);
             }
         }
         return (int)msg.wParam;
