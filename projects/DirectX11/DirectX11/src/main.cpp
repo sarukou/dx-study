@@ -299,7 +299,7 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     float aspect = (float)settings.width / (float)settings.height;
     XMMATRIX projection = XMMatrixPerspectiveFovLH(XM_PIDIV4, aspect, 0.1f, 100.0f);
 
-    // 転置して送る
+    // 転置して保存
     ConstantPerFrame constantPerFrame = {};
     XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
     XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
@@ -308,7 +308,8 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
 
     // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    dx.deviceContext->Map(g_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    HRESULT hr = dx.deviceContext->Map(g_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    ThrowIfFailed(hr, "Map Constant Buffer Failed");
     memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
     dx.deviceContext->Unmap(g_constantBuffer.Get(), 0);
 

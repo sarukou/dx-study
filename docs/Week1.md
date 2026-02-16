@@ -20,14 +20,19 @@
 - 背景色は変わるが、三角形が表示されない
 
 　　特定手順：Viewportを毎フレーム設定にしても変化なし→RS/Viewport が原因ではない
+
 　　　　　　　SV_VertexIDで頂点バッファ/InputLayout を無視した描画と試す→表示された
+
 　　　　　　　VertexBuffer/InputLayout 側が原因と確定
 
 　　原因：CreateBuffer(&bufferDesc, nullptr, &g_vertexBuffer)にしており初期データを渡していなかった。
+
 　　　　　バッファ内容が未定義のため頂点がクリップ外/NaN等になり、描画されない。
 
 　　修正手順：D3D11_SUBRESOURCE_DATA の pSysMem にvertics を代入
+
 　　　　　　　CreateBuffer() でデータを渡す
+
 　　　　　　　代替案（UpdateSubResource や Map/Unmap）
 
 
