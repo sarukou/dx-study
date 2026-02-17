@@ -64,6 +64,14 @@ struct ConstantPerFrame
 // デバッグ用
 static_assert((sizeof(ConstantPerFrame) % 16) == 0, "Constant buffer size must be 16-byte aligned.");
 
+// カメラ構造体
+struct Camera
+{
+    XMFLOAT3 position  = { 0.0f, 1.0f, -5.0f };
+    XMFLOAT3 target = { 0.0f, 1.0f, 0.0f };
+    XMFLOAT3 up = { 0.0f, 1.0f, 0.0f };
+};
+
 
 // ウィンドウハンドル
 HWND g_hWnd;
@@ -283,7 +291,7 @@ static void CreateInputLayout(ID3D11Device* device)
 
 
 // 描画処理（更新）
-static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& settings, float& time)
+static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& settings, Camera& camera, float time)
 {
     // ワールド行列を計算
     XMMATRIX world = XMMatrixIdentity();
@@ -291,13 +299,13 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     world += XMMatrixRotationY(time);
     world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
     // ビュー行列を計算
-    XMVECTOR eye = XMVectorSet(0.0f, 0.0f, -2.0f, 1.0f);
-    XMVECTOR at = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
-    XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-    XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
+    XMMATRIX view = XMMatrixLookAtLH(XMLoadFloat3(&camera.position), XMLoadFloat3(&camera.target), XMLoadFloat3(&camera.up));
     // プロジェクション行列を計算
+    float fovY = 60.0f;
     float aspect = (float)settings.width / (float)settings.height;
-    XMMATRIX projection = XMMatrixPerspectiveFovLH(XM_PIDIV4, aspect, 0.1f, 100.0f);
+    float nearZ = 0.1f;
+    float farZ = 1000.0f;
+    XMMATRIX projection = XMMatrixPerspectiveFovLH(XMConvertToRadians(fovY), aspect, nearZ, farZ);
 
     // 転置して保存
     ConstantPerFrame constantPerFrame = {};
@@ -346,6 +354,50 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     dx.swapChain->Present(1, 0);
 }
 
+
+// カメラ移動
+static void UpdateCameraKeyboard(Camera& camera, float deltaTime)
+{
+    const float move = 3.0f * deltaTime;
+
+    XMVECTOR position = XMLoadFloat3(&camera.position);
+    XMVECTOR target = XMLoadFloat3(&camera.target);
+    XMVECTOR up = XMLoadFloat3(&camera.up);
+
+    XMVECTOR forward = XMVector3Normalize(target - position);
+    XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
+
+    if (GetAsyncKeyState('W') & 0x8000) {
+        position += forward * move;
+        target += forward * move;
+    }
+    if (GetAsyncKeyState('S') & 0x8000) {
+        position -= forward * move;
+        target -= forward * move;
+    }
+    if (GetAsyncKeyState('D') & 0x8000) {
+        position += right * move;
+        target += right * move;
+    }
+    if (GetAsyncKeyState('A') & 0x8000) {
+        position -= right * move;
+        target -= right * move;
+    }
+
+    if (GetAsyncKeyState('E') & 0x8000) {
+        position += up * move;
+        target += up * move;
+    }
+    if (GetAsyncKeyState('Q') & 0x8000) {
+        position -= up * move;
+        target -= up * move;
+    }
+
+    XMStoreFloat3(&camera.position, position);
+    XMStoreFloat3(&camera.target, target);
+}
+
+
 // エントリーポイント
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
@@ -356,6 +408,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     };
     Dx11Context dx = {};
     Shaders shaders = {};
+    Camera camera = {};
 
 
     try {
@@ -387,7 +440,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
             }
             else
             {
-                Render(dx, shaders, settings, time);
+                UpdateCameraKeyboard(camera, 0.016f);
+                Render(dx, shaders, settings, camera, time);
             }
         }
         return (int)msg.wParam;
