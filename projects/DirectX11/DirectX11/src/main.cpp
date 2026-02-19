@@ -68,13 +68,56 @@ static_assert((sizeof(ConstantPerFrame) % 16) == 0, "Constant buffer size must b
 struct Camera
 {
     XMFLOAT3 position  = { 0.0f, 1.0f, -5.0f };
-    XMFLOAT3 target = { 0.0f, 1.0f, 0.0f };
     XMFLOAT3 up = { 0.0f, 1.0f, 0.0f };
+
+    float fovY = XMConvertToRadians(60.0f);
+    float aspect = 1280.0f / 720.0f;
+    float nearZ = 0.1f;
+    float farZ = 1000.0f;
+
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+
+    float moveSpeed = 3.0f;
+
+    // マウス視点操作
+    bool mouseLook = false;
+    float mouseSensitivity = 0.0025f;
+
+
+    // 真上を向けないようにクランプ
+    static float ClampPitch(float pitch)
+    {
+        const float limit = XMConvertToRadians(89.0f);
+
+        if (pitch > limit) {
+            pitch = limit;
+        }
+        if (pitch < -limit) {
+            pitch = -limit;
+        }
+
+        return pitch;
+    }
+
+    // 前方向取得
+    XMVECTOR GetForward() const
+    {
+        const float cosPitch = cosf(pitch);
+        const float sinPitch = sinf(pitch);
+        const float cosYaw = cosf(yaw);
+        const float sinYaw = sinf(yaw);
+
+        // LH 想定
+        XMVECTOR forward = XMVectorSet(cosPitch * sinYaw, sinPitch, cosPitch * cosYaw, 0.0f);
+        return XMVector3Normalize(forward);
+    }
 };
 
 
 // ウィンドウハンドル
 HWND g_hWnd;
+
 
 // 例外処理
 static void ThrowIfFailed(HRESULT hr, const char* msg)
@@ -296,16 +339,13 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     // ワールド行列を計算
     XMMATRIX world = XMMatrixIdentity();
     world *= XMMatrixScaling(1.0f, 1.0f, 1.0f);
-    world += XMMatrixRotationY(time);
+    world *= XMMatrixRotationY(time);
     world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
     // ビュー行列を計算
-    XMMATRIX view = XMMatrixLookAtLH(XMLoadFloat3(&camera.position), XMLoadFloat3(&camera.target), XMLoadFloat3(&camera.up));
+    XMMATRIX view = XMMatrixLookToLH(XMLoadFloat3(&camera.position), camera.GetForward(), XMLoadFloat3(&camera.up));
     // プロジェクション行列を計算
-    float fovY = 60.0f;
-    float aspect = (float)settings.width / (float)settings.height;
-    float nearZ = 0.1f;
-    float farZ = 1000.0f;
-    XMMATRIX projection = XMMatrixPerspectiveFovLH(XMConvertToRadians(fovY), aspect, nearZ, farZ);
+    camera.aspect = (float)settings.width / (float)settings.height;
+    XMMATRIX projection = XMMatrixPerspectiveFovLH(camera.fovY, camera.aspect, camera.nearZ, camera.farZ);
 
     // 転置して保存
     ConstantPerFrame constantPerFrame = {};
@@ -355,46 +395,43 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
 }
 
 
-// カメラ移動
-static void UpdateCameraKeyboard(Camera& camera, float deltaTime)
+// カメラ操作
+static void UpdateCamera(Camera& camera, int mouseDx, int mouseDy, float deltaTime)
 {
-    const float move = 3.0f * deltaTime;
+    // 見回し（マウス操作）
+    camera.yaw += mouseDx * camera.mouseSensitivity;
+    camera.pitch += -mouseDy * camera.mouseSensitivity;
+    camera.pitch = camera.ClampPitch(camera.pitch);
 
+    // 移動
     XMVECTOR position = XMLoadFloat3(&camera.position);
-    XMVECTOR target = XMLoadFloat3(&camera.target);
     XMVECTOR up = XMLoadFloat3(&camera.up);
-
-    XMVECTOR forward = XMVector3Normalize(target - position);
+    XMVECTOR forward = camera.GetForward();
     XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
 
+    const float velocity = camera.moveSpeed * deltaTime;
+
     if (GetAsyncKeyState('W') & 0x8000) {
-        position += forward * move;
-        target += forward * move;
+        position += forward * velocity;
     }
     if (GetAsyncKeyState('S') & 0x8000) {
-        position -= forward * move;
-        target -= forward * move;
+        position -= forward * velocity;
     }
     if (GetAsyncKeyState('D') & 0x8000) {
-        position += right * move;
-        target += right * move;
+        position += right * velocity;
     }
     if (GetAsyncKeyState('A') & 0x8000) {
-        position -= right * move;
-        target -= right * move;
+        position -= right * velocity;
     }
 
     if (GetAsyncKeyState('E') & 0x8000) {
-        position += up * move;
-        target += up * move;
+        position += up * velocity;
     }
     if (GetAsyncKeyState('Q') & 0x8000) {
-        position -= up * move;
-        target -= up * move;
+        position -= up * velocity;
     }
 
     XMStoreFloat3(&camera.position, position);
-    XMStoreFloat3(&camera.target, target);
 }
 
 
@@ -426,28 +463,56 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         CreateConstantBuffer(dx.device.Get());
 
 
-        // メインループ（イベントがあるときは処理、それ以外は描画）
-        float time = 0.0f;
-        MSG msg{};
-        while (msg.message != WM_QUIT)
-        {
-            time += 0.016f;
+        // デルタタイム計算用
+        LARGE_INTEGER freq = {};
+        QueryPerformanceFrequency(&freq);
+        LARGE_INTEGER prev = {};
+        QueryPerformanceCounter(&prev);
 
-            if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
-            {
+        // 必要な変数
+        float time = 0.0f;
+        int mouseDx = 0, mouseDy = 0;
+        POINT cursor = {};
+        GetCursorPos(&cursor);
+
+        MSG msg = {};
+        while (msg.message != WM_QUIT) {  // メインループ
+
+            if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
             }
-            else
-            {
-                UpdateCameraKeyboard(camera, 0.016f);
+            else {
+                // デルタタイム計算
+                LARGE_INTEGER now = {};
+                QueryPerformanceCounter(&now);
+                float deltaTime = float(now.QuadPart - prev.QuadPart) / float(freq.QuadPart);
+                prev = now;
+                // デバッグ停止や負荷で跳ねた時の保険
+                if (deltaTime > 0.1f) {
+                    deltaTime = 0.1f;
+                }
+
+                time += 0.016f;
+
+                // マウス移動量を計算
+                if (GetForegroundWindow() == g_hWnd && camera.mouseLook) {
+                    POINT currentCursor = {};
+                    GetCursorPos(&currentCursor);
+
+                    mouseDx = currentCursor.x - cursor.x;
+                    mouseDy = currentCursor.y - cursor.y;
+
+                    cursor = currentCursor;
+                }
+
+                UpdateCamera(camera, mouseDx, mouseDy, deltaTime);
                 Render(dx, shaders, settings, camera, time);
             }
         }
         return (int)msg.wParam;
     }
-    catch (const std::exception& e)
-    {
+    catch (const std::exception& e) {
         MessageBoxA(nullptr, e.what(), "Fatal Error", MB_ICONERROR | MB_OK);
         return -1;
     }
