@@ -1,7 +1,14 @@
 #include "BasicShader.hlsli"
 
-// ¡‰ñ‚ÍF‚ğ‚»‚Ì‚Ü‚Ü•Ô‚·
+
 float4 PSMain(VSOutput vsOutput) : SV_TARGET
 {
-    return vsOutput.color;
+    float3 normal = normalize(vsOutput.normal);
+    float3 light  = normalize(-Directional);     // –Ê¨Œõ‚Ì‡‚í‚¹‚é
+    float ndotl   = saturate(dot(normal, light));
+
+    float3 diffuse = LightColor * ndotl;
+    float3 rgb     = (Ambient + diffuse) * vsOutput.color.rgb;
+    
+    return float4(rgb, vsOutput.color.a);
 }

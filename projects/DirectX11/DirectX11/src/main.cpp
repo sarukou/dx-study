@@ -42,6 +42,7 @@ struct Dx11Context
 struct Vertex
 {
     float x, y, z;      // POSITION
+    float nx, ny, nz;   // NORMAL（法線）
     float r, g, b, a;   // COLOR
 };
 
@@ -60,6 +61,11 @@ struct ConstantPerFrame
     DirectX::XMFLOAT4X4 viewMatrix;
     DirectX::XMFLOAT4X4 projectionMatrix;
     DirectX::XMFLOAT4X4 worldViewProjectionMatrix;
+
+    // ライト
+    DirectX::XMFLOAT3 directional; float padding0;
+    DirectX::XMFLOAT3 lightColor;  float padding1;
+    DirectX::XMFLOAT3 ambient;     float padding2;
 };
 // デバッグ用
 static_assert((sizeof(ConstantPerFrame) % 16) == 0, "Constant buffer size must be 16-byte aligned.");
@@ -267,9 +273,9 @@ static void CreateVertexBuffer(ID3D11Device* device)
     // 頂点情報指定
     Vertex vertices[] =
     {
-        {  0.0f,  0.5f, 0.0f,  1,0,0,1 }, // 上：赤
-        {  0.5f, -0.5f, 0.0f,  0,1,0,1 }, // 右下：緑
-        { -0.5f, -0.5f, 0.0f,  0,0,1,1 }, // 左下：青
+        {  0.0f,  0.5f, 0.0f,  0, 0, -1,  1, 0, 0, 1 }, // 上：赤
+        {  0.5f, -0.5f, 0.0f,  0, 0, -1,  0, 1, 0, 1 }, // 右下：緑
+        { -0.5f, -0.5f, 0.0f,  0, 0, -1,  0, 0, 1, 1 }, // 左下：青
     };
 
     // 各設定（どんな用途・性質）
@@ -324,6 +330,7 @@ static void CreateInputLayout(ID3D11Device* device)
     D3D11_INPUT_ELEMENT_DESC layout[] =
     {
         { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
 
@@ -353,6 +360,13 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
     XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
     XMStoreFloat4x4(& constantPerFrame.worldViewProjectionMatrix,XMMatrixTranspose(world * view * projection));
+
+
+    // ライト系
+    constantPerFrame.directional = { 0.0f, -1.0f, 1.0f }; // 光が進む向き
+    constantPerFrame.lightColor  = { 1.0f,  1.0f, 1.0f };
+    constantPerFrame.ambient     = { 0.3f,  0.3f, 0.3f };
+
 
     // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）
     D3D11_MAPPED_SUBRESOURCE mapped = {};
@@ -386,6 +400,7 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     // シェーダーに定数バッファを設定（HLSL 側で register(b0) にしたのでスロット 0 に入れる）
     ID3D11Buffer* constantBuffers[] = { g_constantBuffer.Get() };
     dx.deviceContext->VSSetConstantBuffers(0, 1, constantBuffers);
+    dx.deviceContext->PSSetConstantBuffers(0, 1, constantBuffers);
 
     // 描き込み
     dx.deviceContext->Draw(3, 0);

@@ -1,10 +1,14 @@
 #include "BasicShader.hlsli"
 
-// 今回は座標をそのまま返す
+
 VSOutput VSMain(VSInput input)
 {
     VSOutput output;
     output.position = mul(float4(input.position, 1.0f), WorldViewProjection);
+    
+    // ワールド空間法線
+    output.normal = normalize(mul(input.normal, (float3x3) World));
+    
     output.color = input.color;
 	return output;
 }
