@@ -8,6 +8,7 @@
 
 #include <iterator>
 #include <string>
+#include <vector>
 
 #include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
@@ -41,9 +42,9 @@ struct Dx11Context
 // 頂点情報（CPU→GPUに渡す形）
 struct Vertex
 {
-    float x, y, z;      // POSITION
-    float nx, ny, nz;   // NORMAL（法線）
-    float r, g, b, a;   // COLOR
+    DirectX::XMFLOAT3 position;
+    DirectX::XMFLOAT3 normal;
+    DirectX::XMFLOAT2 uv;
 };
 
 // シェーダー構造体
@@ -273,9 +274,10 @@ static void CreateVertexBuffer(ID3D11Device* device)
     // 頂点情報指定
     Vertex vertices[] =
     {
-        {  0.0f,  0.5f, 0.0f,  0, 0, -1,  1, 0, 0, 1 }, // 上：赤
-        {  0.5f, -0.5f, 0.0f,  0, 0, -1,  0, 1, 0, 1 }, // 右下：緑
-        { -0.5f, -0.5f, 0.0f,  0, 0, -1,  0, 0, 1, 1 }, // 左下：青
+        { { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f } }, // 左上
+        { {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f } }, // 右上
+        { {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f } }, // 右下
+        { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f } }, // 左下
     };
 
     // 各設定（どんな用途・性質）
@@ -291,6 +293,30 @@ static void CreateVertexBuffer(ID3D11Device* device)
     initData.pSysMem = vertices;
 
     ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_vertexBuffer.GetAddressOf()), "Create Vertex Buffer Failed");
+}
+
+// IndexBuffer 作成
+ComPtr<ID3D11Buffer> g_indexBuffer;
+static void CreateIndexBuffer(ID3D11Device* device)
+{
+    std::vector<uint32_t> indices =
+    {
+        0, 1, 2,
+        0, 2, 3
+    };
+
+    D3D11_BUFFER_DESC bufferDesc = {};
+    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * indices.size());
+    bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    bufferDesc.CPUAccessFlags = 0;
+    bufferDesc.MiscFlags = 0;
+    bufferDesc.StructureByteStride = 0;
+
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem = indices.data();
+
+    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, &g_indexBuffer), "Create Index Buffer Failed");
 }
 
 // ConstantBuffer 作成
