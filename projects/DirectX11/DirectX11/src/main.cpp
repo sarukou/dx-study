@@ -8,7 +8,6 @@
 
 #include <iterator>
 #include <string>
-#include <vector>
 
 #include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
@@ -124,6 +123,26 @@ struct Camera
 
 // ウィンドウハンドル
 HWND g_hWnd;
+
+
+namespace
+{
+    // 頂点情報指定
+    constexpr Vertex vertices[] =
+    {
+        { { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f } }, // 左上
+        { {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f } }, // 右上
+        { {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f } }, // 右下
+        { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f } }, // 左下
+    };
+
+    // インデックス情報指定
+    constexpr uint32_t indices[] =
+    {
+        0, 1, 2,
+        0, 2, 3
+    };
+}
 
 
 // 例外処理
@@ -271,15 +290,6 @@ static void InitD3D11(HWND hwnd, const ProjectSettings& settings, Dx11Context& d
 ComPtr<ID3D11Buffer> g_vertexBuffer;
 static void CreateVertexBuffer(ID3D11Device* device)
 {
-    // 頂点情報指定
-    Vertex vertices[] =
-    {
-        { { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f } }, // 左上
-        { {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f } }, // 右上
-        { {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f } }, // 右下
-        { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f } }, // 左下
-    };
-
     // 各設定（どんな用途・性質）
     D3D11_BUFFER_DESC bufferDesc = {};
     bufferDesc.ByteWidth = sizeof(vertices);            // バッファーサイズ（バイト数）
@@ -299,14 +309,8 @@ static void CreateVertexBuffer(ID3D11Device* device)
 ComPtr<ID3D11Buffer> g_indexBuffer;
 static void CreateIndexBuffer(ID3D11Device* device)
 {
-    std::vector<uint32_t> indices =
-    {
-        0, 1, 2,
-        0, 2, 3
-    };
-
     D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * indices.size());
+    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * static_cast<UINT>(std::size(indices)));
     bufferDesc.Usage = D3D11_USAGE_DEFAULT;
     bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
     bufferDesc.CPUAccessFlags = 0;
@@ -314,9 +318,9 @@ static void CreateIndexBuffer(ID3D11Device* device)
     bufferDesc.StructureByteStride = 0;
 
     D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = indices.data();
+    initData.pSysMem = indices;
 
-    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, &g_indexBuffer), "Create Index Buffer Failed");
+    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_indexBuffer.GetAddressOf()), "Create Index Buffer Failed");
 }
 
 // ConstantBuffer 作成
@@ -357,7 +361,7 @@ static void CreateInputLayout(ID3D11Device* device)
     {
         { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
 
     HRESULT hr = device->CreateInputLayout(layout, _countof(layout),
@@ -409,13 +413,14 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     // 出力先（RTV）をセット
     dx.deviceContext->OMSetRenderTargets(1,dx.renderTargetView.GetAddressOf(), nullptr);
 
-    // IA（Input Assembler）設定：Layout / VB / Topology
+    // IA（Input Assembler）設定：Layout / VertexBuffer / IndexBuffer / Topology
     dx.deviceContext->IASetInputLayout(g_inputLayout.Get());
 
     UINT stride = sizeof(Vertex);
     UINT offset = 0;
-    ID3D11Buffer* vb = g_vertexBuffer.Get();
-    dx.deviceContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+    dx.deviceContext->IASetVertexBuffers(0, 1, g_vertexBuffer.GetAddressOf(), &stride, &offset);
+
+    dx.deviceContext->IASetIndexBuffer(g_indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
 
     dx.deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
 
@@ -429,7 +434,7 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     dx.deviceContext->PSSetConstantBuffers(0, 1, constantBuffers);
 
     // 描き込み
-    dx.deviceContext->Draw(3, 0);
+    dx.deviceContext->DrawIndexed(static_cast<UINT>(std::size(indices)), 0, 0);
 
     // 表示
     dx.swapChain->Present(1, 0);
@@ -500,6 +505,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         CreateInputLayout(dx.device.Get());
         // 頂点バッファ作成
         CreateVertexBuffer(dx.device.Get());
+        // インデックスバッファ作成
+        CreateIndexBuffer(dx.device.Get());
         // 定数バッファ作成
         CreateConstantBuffer(dx.device.Get());
 

@@ -9,6 +9,6 @@ VSOutput VSMain(VSInput input)
     // ƒ[ƒ‹ƒh‹óŠÔ–@ü
     output.normal = normalize(mul(input.normal, (float3x3) World));
     
-    output.color = input.color;
+    output.uv = input.uv;
 	return output;
 }

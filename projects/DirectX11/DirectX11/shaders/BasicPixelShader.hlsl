@@ -8,7 +8,8 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float ndotl   = saturate(dot(normal, light));
 
     float3 diffuse = LightColor * ndotl;
-    float3 rgb     = (Ambient + diffuse) * vsOutput.color.rgb;
+    float3 rgb     = (Ambient + diffuse);
     
-    return float4(rgb, vsOutput.color.a);
+    return float4(vsOutput.uv, 0.0f, 1.0f);
+    //return float4(rgb, 1.0f);
 }
