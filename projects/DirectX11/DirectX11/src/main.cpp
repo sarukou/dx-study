@@ -8,6 +8,12 @@
 
 #include <iterator>
 #include <string>
+#include <vector>
+#include <array>
+
+#include <fstream>
+#include <sstream>
+#include <cstdint>
 
 #include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
@@ -44,6 +50,13 @@ struct Vertex
     DirectX::XMFLOAT3 position;
     DirectX::XMFLOAT3 normal;
     DirectX::XMFLOAT2 uv;
+};
+
+// メッシュデータ
+struct MeshData
+{
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 };
 
 // シェーダー構造体
@@ -120,29 +133,16 @@ struct Camera
     }
 };
 
+// OBJファイル用
+struct ObjIndex
+{
+    int positionIndex = 0;
+    int uvIndex = 0;
+    int normalIndex = 0;
+};
 
 // ウィンドウハンドル
 HWND g_hWnd;
-
-
-namespace
-{
-    // 頂点情報指定
-    constexpr Vertex vertices[] =
-    {
-        { { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 0.0f } }, // 左上
-        { {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 0.0f } }, // 右上
-        { {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f } }, // 右下
-        { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f } }, // 左下
-    };
-
-    // インデックス情報指定
-    constexpr uint32_t indices[] =
-    {
-        0, 1, 2,
-        0, 2, 3
-    };
-}
 
 
 // 例外処理
@@ -288,11 +288,11 @@ static void InitD3D11(HWND hwnd, const ProjectSettings& settings, Dx11Context& d
 
 // VertexBuffer 作成
 ComPtr<ID3D11Buffer> g_vertexBuffer;
-static void CreateVertexBuffer(ID3D11Device* device)
+static void CreateVertexBuffer(ID3D11Device* device, const MeshData& meshData)
 {
     // 各設定（どんな用途・性質）
     D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.ByteWidth = sizeof(vertices);            // バッファーサイズ（バイト数）
+    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(Vertex) * meshData.vertices.size());            // バッファーサイズ（バイト数）
     bufferDesc.Usage = D3D11_USAGE_DEFAULT;             // バッファの使われ方（今回は「 GPU が主に使う」）
     bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;    // このバッファを何としてパイプラインにバインドするか（頂点バッファ）
     bufferDesc.CPUAccessFlags = 0;                      // CPU がこのバッファにアクセスできるか（ 0 はできない）
@@ -300,17 +300,17 @@ static void CreateVertexBuffer(ID3D11Device* device)
     bufferDesc.StructureByteStride = 0;                 // 特殊フラグの要素サイズ（使わないのでもちろんなし）
 
     D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = vertices;
+    initData.pSysMem = meshData.vertices.data();
 
     ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_vertexBuffer.GetAddressOf()), "Create Vertex Buffer Failed");
 }
 
 // IndexBuffer 作成
 ComPtr<ID3D11Buffer> g_indexBuffer;
-static void CreateIndexBuffer(ID3D11Device* device)
+static void CreateIndexBuffer(ID3D11Device* device, const MeshData& meshData)
 {
     D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * static_cast<UINT>(std::size(indices)));
+    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * meshData.indices.size());
     bufferDesc.Usage = D3D11_USAGE_DEFAULT;
     bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
     bufferDesc.CPUAccessFlags = 0;
@@ -318,7 +318,7 @@ static void CreateIndexBuffer(ID3D11Device* device)
     bufferDesc.StructureByteStride = 0;
 
     D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = indices;
+    initData.pSysMem = meshData.indices.data();
 
     ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_indexBuffer.GetAddressOf()), "Create Index Buffer Failed");
 }
@@ -370,8 +370,110 @@ static void CreateInputLayout(ID3D11Device* device)
 }
 
 
+// OBJ の 1要素を読む
+static ObjIndex ParseObjVertexToken(const std::string& token)
+{
+    ObjIndex result = {};
+
+    std::stringstream ss(token);
+    std::string part;
+
+    if (!std::getline(ss, part, '/')) {
+        throw std::runtime_error("OBJ face parse failed: position index missing.");
+    }
+    result.positionIndex = std::stoi(part);
+
+    if (!std::getline(ss, part, '/')) {
+        throw std::runtime_error("OBJ face parse failed: uv index missing.");
+    }
+    result.uvIndex = std::stoi(part);
+
+    if (!std::getline(ss, part, '/')) {
+        throw std::runtime_error("OBJ face parse failed: normal index missing.");
+    }
+    result.normalIndex = std::stoi(part);
+
+    return result;
+}
+
+// OBJ 読み込み
+static MeshData LoadObj(const std::wstring& path)
+{
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open OBJ file.");
+    }
+
+    std::vector<XMFLOAT3> positions;
+    std::vector<XMFLOAT2> uvs;
+    std::vector<XMFLOAT3> normals;
+
+    MeshData meshData = {};
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) {
+            continue;
+        }
+
+        std::stringstream ss(line);
+        std::string type;
+        ss >> type;
+
+        if (type == "v") {
+            XMFLOAT3 p = {};
+            ss >> p.x >> p.y >> p.z;
+            positions.push_back(p);
+        }
+        else if (type == "vt") {
+            XMFLOAT2 uv = {};
+            ss >> uv.x >> uv.y;
+
+            uvs.push_back(uv);
+        }
+        else if (type == "vn") {
+            XMFLOAT3 n = {};
+            ss >> n.x >> n.y >> n.z;
+            normals.push_back(n);
+        }
+        else if (type == "f") {
+            std::array<std::string, 3> tokens = {};
+            ss >> tokens[0] >> tokens[1] >> tokens[2];
+
+            for (int i = 0; i < 3; ++i) {
+                ObjIndex objIndex = ParseObjVertexToken(tokens[i]);
+
+                if (objIndex.positionIndex <= 0 || objIndex.positionIndex > static_cast<int>(positions.size())) {
+                    throw std::runtime_error("OBJ position index out of range.");
+                }
+                if (objIndex.uvIndex <= 0 || objIndex.uvIndex > static_cast<int>(uvs.size())) {
+                    throw std::runtime_error("OBJ uv index out of range.");
+                }
+                if (objIndex.normalIndex <= 0 || objIndex.normalIndex > static_cast<int>(normals.size())) {
+                    throw std::runtime_error("OBJ normal index out of range.");
+                }
+
+                Vertex vertex = {};
+                vertex.position = positions[objIndex.positionIndex - 1];
+                vertex.uv = uvs[objIndex.uvIndex - 1];
+                vertex.normal = normals[objIndex.normalIndex - 1];
+
+                meshData.vertices.push_back(vertex);
+                meshData.indices.push_back(static_cast<uint32_t>(meshData.indices.size()));
+            }
+        }
+    }
+
+    if (meshData.vertices.empty() || meshData.indices.empty()) {
+        throw std::runtime_error("OBJ mesh is empty.");
+    }
+
+    return meshData;
+}
+
+
 // 描画処理（更新）
-static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& settings, Camera& camera, float time)
+static void Render(Dx11Context& dx, const MeshData& meshData, Shaders& shaders, const ProjectSettings& settings, Camera& camera, float time)
 {
     // ワールド行列を計算
     XMMATRIX world = XMMatrixIdentity();
@@ -434,7 +536,7 @@ static void Render(Dx11Context& dx, Shaders& shaders, const ProjectSettings& set
     dx.deviceContext->PSSetConstantBuffers(0, 1, constantBuffers);
 
     // 描き込み
-    dx.deviceContext->DrawIndexed(static_cast<UINT>(std::size(indices)), 0, 0);
+    dx.deviceContext->DrawIndexed(static_cast<UINT>(meshData.indices.size()), 0, 0);
 
     // 表示
     dx.swapChain->Present(1, 0);
@@ -490,6 +592,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 .height = 720
     };
     Dx11Context dx = {};
+    MeshData meshData = {};
     Shaders shaders = {};
     Camera camera = {};
 
@@ -503,10 +606,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         CreateShaders(shaders, dx);
         // インプットレイアウト作成
         CreateInputLayout(dx.device.Get());
+        meshData = LoadObj(L"model.obj");
         // 頂点バッファ作成
-        CreateVertexBuffer(dx.device.Get());
+        CreateVertexBuffer(dx.device.Get(), meshData);
         // インデックスバッファ作成
-        CreateIndexBuffer(dx.device.Get());
+        CreateIndexBuffer(dx.device.Get(), meshData);
         // 定数バッファ作成
         CreateConstantBuffer(dx.device.Get());
 
@@ -541,7 +645,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                     deltaTime = 0.1f;
                 }
 
-                time += 0.016f;
+                time += deltaTime;
 
                 // マウス移動量を計算
                 if (GetForegroundWindow() == g_hWnd && camera.mouseLook) {
@@ -555,7 +659,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 }
 
                 UpdateCamera(camera, mouseDx, mouseDy, deltaTime);
-                Render(dx, shaders, settings, camera, time);
+                Render(dx, meshData, shaders, settings, camera, time);
             }
         }
         return (int)msg.wParam;
