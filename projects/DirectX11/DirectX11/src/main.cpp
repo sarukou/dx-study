@@ -15,6 +15,8 @@
 #include <sstream>
 #include <cstdint>
 
+#include <wincodec.h>
+
 #include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
 
@@ -22,6 +24,8 @@
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+
+#pragma comment(lib, "windowscodecs.lib")
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
@@ -369,6 +373,124 @@ static void CreateInputLayout(ID3D11Device* device)
     ThrowIfFailed(hr, "Create InputLayout Failed");
 }
 
+// Texture作成
+ComPtr<ID3D11ShaderResourceView> g_textureSRV;
+static void CreateTextureFromFile(ID3D11Device* device, const wchar_t* filePath)
+{
+    // WIC（画像読み込みライブラリ）のファクトリ生成
+    ComPtr<IWICImagingFactory> factory;
+    ThrowIfFailed(
+        CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(factory.GetAddressOf())),
+        "CoCreateInstance For WIC Factory Failed"
+    );
+
+    // ファイルをデコード //
+    ComPtr<IWICBitmapDecoder> decoder;
+    ThrowIfFailed(
+        factory->CreateDecoderFromFilename(filePath, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, decoder.GetAddressOf()),
+        "Create DecoderFromFilename Failed"
+    );
+
+    // フレーム取得（通常画像は1フレーム）//
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ThrowIfFailed(
+        decoder->GetFrame(0, frame.GetAddressOf()),
+        "GetFrame Failed"
+    );
+
+    // RGBA32に変換 //
+    ComPtr<IWICFormatConverter> converter;
+    ThrowIfFailed(
+        factory->CreateFormatConverter(converter.GetAddressOf()),
+        "Create FormatConverter Failed"
+    );
+    ThrowIfFailed(
+        converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom),
+        "WIC Format Converter Initialize Failed"
+    );
+
+    // サイズ取得 //
+    UINT width = 0; UINT height = 0;
+    ThrowIfFailed(
+        converter->GetSize(&width, &height),
+        "Get Size Failed"
+    );
+
+    // ピクセルバッファに読み込み //
+    const UINT bytesPerPixel = 4;
+    const UINT rowPitch = width * bytesPerPixel;
+    const UINT imageSize = rowPitch * height;
+    std::vector<std::uint8_t> pixels(imageSize);
+    ThrowIfFailed(
+        converter->CopyPixels(nullptr, rowPitch, imageSize, pixels.data()),
+        "Copy Pixels Failed"
+    );
+
+
+    // テクスチャを作成 //
+    D3D11_TEXTURE2D_DESC textureDesc = {};
+    textureDesc.Width = width;
+    textureDesc.Height = height;
+    textureDesc.MipLevels = 1;
+    textureDesc.ArraySize = 1;
+    textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.SampleDesc.Quality = 0;
+    textureDesc.Usage = D3D11_USAGE_DEFAULT;
+    textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    textureDesc.CPUAccessFlags = 0;
+    textureDesc.MiscFlags = 0;
+
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem = pixels.data();
+    initData.SysMemPitch = rowPitch;
+    initData.SysMemSlicePitch = imageSize;
+
+    ComPtr<ID3D11Texture2D> texture;
+    ThrowIfFailed(
+        device->CreateTexture2D(&textureDesc, &initData, &texture),
+        "Create Texture2D Failed"
+    );
+
+
+    // SRV（シェーダーリソースビュー）を作成 //
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = textureDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    ThrowIfFailed(
+        device->CreateShaderResourceView(texture.Get(), &srvDesc, g_textureSRV.GetAddressOf()),
+        "Create ShaderResorceView Failed"
+    );
+}
+
+// SamplerState作成
+ComPtr<ID3D11SamplerState> g_samplerState;
+static void CreateSamplerState(ID3D11Device* device)
+{
+    D3D11_SAMPLER_DESC samplerDesc = {};
+    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressW= D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.MipLODBias = 0.0f;
+    samplerDesc.MaxAnisotropy = 1;
+    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    samplerDesc.BorderColor[0] = 0.0f;
+    samplerDesc.BorderColor[1] = 0.0f;
+    samplerDesc.BorderColor[2] = 0.0f;
+    samplerDesc.BorderColor[3] = 0.0f;
+    samplerDesc.MinLOD = 0;
+    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+    ThrowIfFailed(
+        device->CreateSamplerState(&samplerDesc, g_samplerState.GetAddressOf()),
+        "Create SamplerState Failed"
+    );
+}
+
 
 // OBJ の 1要素を読む
 static ObjIndex ParseObjVertexToken(const std::string& token)
@@ -530,6 +652,10 @@ static void Render(Dx11Context& dx, const MeshData& meshData, Shaders& shaders, 
     dx.deviceContext->VSSetShader(shaders.vertexShader.Get(), nullptr, 0);
     dx.deviceContext->PSSetShader(shaders.pixelShader.Get(), nullptr, 0);
 
+    // シェーダーにテクスチャとサンプラーを設定
+    dx.deviceContext->PSSetShaderResources(0, 1, g_textureSRV.GetAddressOf());
+    dx.deviceContext->PSSetSamplers(0, 1, g_samplerState.GetAddressOf());
+
     // シェーダーに定数バッファを設定（HLSL 側で register(b0) にしたのでスロット 0 に入れる）
     ID3D11Buffer* constantBuffers[] = { g_constantBuffer.Get() };
     dx.deviceContext->VSSetConstantBuffers(0, 1, constantBuffers);
@@ -595,24 +721,35 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     MeshData meshData = {};
     Shaders shaders = {};
     Camera camera = {};
-
+    
+    // COM 初期化
+    ThrowIfFailed(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED), "CoInitializeEx failed");
 
     try {
         // ウィンドウ初期化
         InitWindow(hInstance, nCmdShow, settings);
         // D3D11初期化
         InitD3D11(g_hWnd, settings, dx);
+
         // シェーダー作成
         CreateShaders(shaders, dx);
         // インプットレイアウト作成
         CreateInputLayout(dx.device.Get());
+
+        // メッシュ作成
         meshData = LoadObj(L"model.obj");
+
         // 頂点バッファ作成
         CreateVertexBuffer(dx.device.Get(), meshData);
         // インデックスバッファ作成
         CreateIndexBuffer(dx.device.Get(), meshData);
         // 定数バッファ作成
         CreateConstantBuffer(dx.device.Get());
+
+        // テクスチャ作成
+        CreateTextureFromFile(dx.device.Get(), L"test.jpg");
+        // サンプラーステート作成
+        CreateSamplerState(dx.device.Get());
 
 
         // デルタタイム計算用
@@ -662,9 +799,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 Render(dx, meshData, shaders, settings, camera, time);
             }
         }
+        // COM 解除
+        CoUninitialize();
+
         return (int)msg.wParam;
     }
     catch (const std::exception& e) {
+        // COM 解除
+        CoUninitialize();
+
         MessageBoxA(nullptr, e.what(), "Fatal Error", MB_ICONERROR | MB_OK);
         return -1;
     }
