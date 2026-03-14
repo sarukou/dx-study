@@ -10,8 +10,11 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float ndotl   = saturate(dot(normal, light));
 
     float3 diffuse = LightColor * ndotl;
-    float3 rgb     = (Ambient + diffuse);
+    float3 lighting     = Ambient + diffuse;
     
-    return gTexture.Sample(gSampler, vsOutput.uv);
-    //return float4(rgb, 1.0f);
+    float4 textureColor = gTexture.Sample(gSampler, vsOutput.uv);
+    
+    float3 finalRGB = textureColor.rgb * lighting;
+    
+    return float4(finalRGB, textureColor.a);
 }
