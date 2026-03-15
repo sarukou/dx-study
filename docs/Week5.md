@@ -129,3 +129,35 @@
 
 　　　　そのため、OBJをそのままGPUに渡すことはできず、OBJの v / vt / vn / f を読んで、vertices と indices に変換する必要がある。
 
+- WICを使った画像読み込み
+
+　　今回は WICTextureLoader のような補助ライブラリは使わず、WICを自分で利用して画像ファイルを読み込んだ。
+
+　　WICはWindows標準の画像デコード機能で、pngやjpgなどの画像ファイルを読み込み、ピクセルデータへ変換する役割を持っている。
+
+　　まずWICのファクトリを作成、ファクトリから画像デコーダを作成、画像の先頭フレームを取得、IWICFormatConverter を使ってピクセルフォーマットを 32bppRGBA に変換、CopyPixels() を使って画像データをCPUメモリ上の配列にコピーという流れで読み込みを行った。
+
+　　フォーマットを揃えることで、Direct3D側で DXGI_FORMAT_R8G8B8A8_UNORM のテクスチャとして扱いやすくなる。
+
+　　この時点ではまだ「画像ファイルを読んだだけ」であり、GPUのテクスチャになってはおらず、画像ファイルの読み込みと、GPUリソースの作成は別工程である。
+
+- Texture2DとShaderResourceView
+
+　　ID3D11Texture2D：
+
+　　　　GPU上に作られるテクスチャリソースそのもの
+
+　　　　画像のピクセルデータを保持する実体が Texture2D
+
+　　ID3D11ShaderResourceView：
+
+　　　　テクスチャをシェーダーから参照するための窓口
+
+　　　　Pixel Shaderに直接 Texture2D を渡すのではなく、SRVを通してアクセスを行う
+
+テクスチャ表示を行うには、画像から Texture2D を作るだけでなく、それに対する ShaderResourceView も作成する必要がある。
+
+- SamplerState
+
+　　テクスチャ表示には、画像そのものだけでなくその画像をどのように読むかを決める設定を決めるために SamplerState が存在する。
+
