@@ -3,7 +3,7 @@
 
 ## Done
 
-- DX11: モデル描画ができるようになる（OBJファイル）
+- DX11: モデル描画、テクスチャ実装ができている状態にする（OBJファイル）
 
 
 ## Environment
@@ -129,7 +129,7 @@
 
 　　　　そのため、OBJをそのままGPUに渡すことはできず、OBJの v / vt / vn / f を読んで、vertices と indices に変換する必要がある。
 
-- WICを使った画像読み込み
+- WICを使った画像読み込み・テクスチャ作成
 
 　　今回は WICTextureLoader のような補助ライブラリは使わず、WICを自分で利用して画像ファイルを読み込んだ。
 
@@ -147,6 +147,85 @@
 
 　　　　WIC ではデコーダ、フォーマットコンバータ、ビットマップなどのいろいろなオブジェクトを使うが、それらを作る機転が IWICImagingFactory
 
+　　　　CoCreateInstance関数（COMオブジェクトを生成する関数）で作成する。
+
+　　IWICBitmapDecoder：
+
+　　　　画像ファイルを読み解くオブジェクト（ファイル形式を理解して中身を取り出す担当）
+
+　　　　png や jpg のファイルはそのままでは単なるバイト列だが、それを幅、高さ、ピクセルフォーマット、ピクセル内容として読み取れる形にするのがデコーダ。
+
+　　　　CreateDecoderFromFilename関数で読み込み、パスや読み取り専用か、キャッシュについて、受け取り先を設定する。
+
+　　　　フレーム取得（GetFrame）：
+
+　　　　　　png や jpg は 1フレームだけだが、GIF や TIFFの一部、アニメーション画像などは複数フレームを持つことがある。
+
+　　　　　　デコーダから何番目のフレームを使うかを選ぶ。今回は先頭フレームを使用。（jpg のため）
+
+　　IWICBitmapFrameDecode：
+
+　　　　一枚分の画像データを表すオブジェクト。
+
+　　　　ここからサイズ取得、ピクセルフォーマット確認、ピクセル変換ができる。
+
+　　　　フレーム取得の出力先として使われる。
+
+　　IWICFormatConverter：
+
+　　　　画像のピクセル形式を変換するオブジェクト。
+
+　　　　Initialize関数で変換元の画像データ、変換先のフォーマットやパレット設定などを指定する。
+
+　　　　ピクセルフォーマット変換：
+
+　　　　　　画像ファイルのピクセルフォーマットはいろいろある。
+
+　　　　　　（例）RGB24,BGR24,BGRA32,Gray8,Indexed color など
+
+　　　　　　Direct3D側で扱いやすいフォーマットにしたい、揃えたいため、WIC側は32bppRGBA、D3D側はDXGI_FORMAT_R8G8B8A8_UNORM としている。
+
+　　　　　　これに揃えた場合はどんな画像が来ても最終的に RGBA8 の 4チャンネル画像に統一できる。
+
+　　　　サイズ取得：
+
+　　　　　　元のフレーム（FrameDecode）からでも取得することができるが、最終的に使う変換後画像のサイズとして取得している。
+
+　　　　ピクセルバッファに読み込み（CopyPixels）：
+
+　　　　　　変換後の画像を、CPUメモリ上の生のバイト配列にコピー
+
+　　　　　　pixelsの中には「R,G,B,A,R,G,B,A,...」のように並んだピクセルデータが入る。（GPUテクスチャではなく CPU配列）
+
+　　　　　　（今回の実装の例）
+
+　　　　　　　　bytesPerPixel = 4：
+
+　　　　　　　　　　RGBA8 なので R8bit, G8bit, B8bit, A8bit のため合計 4バイト
+
+　　　　　　　　rowPitch = width * bytesPerPixel：
+
+　　　　　　　　　　1行当たりのバイト数（行ピッチ）
+
+　　　　　　　　　　幅256 なら 256 * 4 = 1024byte
+
+　　　　　　　　imageSize = rowPitch * height：
+
+　　　　　　　　　　画像全体の総バイト数（行 * 高さ）
+
+　　　　　　　　std::vector<std::uint8_t> pixels(imageSize)：
+
+　　　　　　　　　　画像全体を入れるバッファの確保
+
+　　　　　　　　　　1要素＝1バイトのため uint8_t
+
+　　Texture2D作成：
+
+　　　　CreateTexture2D関数で GPU上に本物のテクスチャリソースを作成する。
+
+　　　　引数では、Desc、初期ピクセルデータ、出力先を指定する。
+
+
 - Texture2DとShaderResourceView
 
 　　ID3D11Texture2D：
@@ -161,7 +240,25 @@
 
 　　　　Pixel Shaderに直接 Texture2D を渡すのではなく、SRVを通してアクセスを行う
 
-テクスチャ表示を行うには、画像から Texture2D を作るだけでなく、それに対する ShaderResourceView も作成する必要がある。
+　　テクスチャ表示を行うには、画像から Texture2D を作るだけでなく、それに対する ShaderResourceView も作成する必要がある。
+
+- SamplerState
+
+　　テクスチャをどのように読むかを表す設定オブジェクト
+
+　　テクスチャ自体は画像データそのものを持っているが、その画像をPixel Shaderで参照するときに、どのようなルールで色を取り出すかを決めるためのもの。
+
+　　SamplerState が別オブジェクトの理由：
+
+　　　　SamplerState が Texture と別れていることで同じテクスチャに対して複数の読み方を使い分けることができる。
+
+　　　　なめらかに補間、ドット絵のように補間なし、UV範囲外で繰り返す、UV範囲外で端の色を維持、という違いを Texture 本体を作り直さずに切り替えられる。
+
+　　SamplerState が関わる場面：
+
+　　　　HLSL の PixelShader で Texture2D.Sample() を呼んだ時に使われる。
+
+　　　　Sample() はその座標の色を返すわけではなく、SamplerState に従って色を返している。
 
 - Pixel Shaderでのテクスチャサンプリング
 
@@ -190,4 +287,5 @@
 　　　　texColor.rgb * lighting で最終色を計算
 
 　　この実装で単に画像を貼るだけだった状態から、光の方向によって明るさが変化する、より立体感のある見た目になる。
+
 

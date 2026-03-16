@@ -17,12 +17,12 @@ Week4
 DX11 でライティング基礎の実装を行い、Lambert + Normal で陰影がつく状態にする。
 
 Week5
-DX11 でモデル描画ができるようになる（OBJファイル）
+DX11 でモデル描画、テクスチャ実装ができている状態にする。（OBJファイル）
 
 
 ## Projects
 
-- `projects/DirectX11/DirectX11` : DirectX11 三角形表示（クリア色＋シェーダー最小構成、Y軸回転、視点移動）
+- `projects/DirectX11/DirectX11` : DirectX11 OBJモデル表示（テクスチャ＋ライティング最小、Y軸回転、視点移動）
 
 - `projects/DirectX12/DirectX12` : 
 
