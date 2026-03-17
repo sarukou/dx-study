@@ -17,6 +17,7 @@
 
 ## Issues & Fixes
 
+特になし
 
 ## Learning
 
