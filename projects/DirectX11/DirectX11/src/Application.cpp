@@ -1,0 +1,159 @@
+#include "Application.h"
+
+#include "ObjLoader.h"
+#include "Utility.h"
+
+#include <DirectXMath.h>
+
+using namespace DirectX;
+
+bool Application::Initialize(HINSTANCE hInstance, int nCmdShow)
+{
+    if (!m_window.Initialize(hInstance, nCmdShow, m_settings)) {
+        return false;
+    }
+
+    m_renderer.Initialize(m_window.GetHwnd(), m_settings);
+    m_shader.Initialize(m_renderer);
+
+    MeshData meshData = LoadObj(L"model.obj");
+    m_mesh.Initialize(m_renderer, meshData);
+
+    m_texture.Initialize(m_renderer, L"test.jpg");
+
+    QueryPerformanceFrequency(&m_frequency);
+    QueryPerformanceCounter(&m_prevCounter);
+
+    GetCursorPos(&m_prevCursor);
+
+    return true;
+}
+
+int Application::Run()
+{
+    MSG msg = {};
+
+    while (msg.message != WM_QUIT) {
+        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        else {
+            float deltaTime = CalculateDeltaTime();
+            Update(deltaTime);
+            Render();
+        }
+    }
+
+    return static_cast<int>(msg.wParam);
+}
+
+void Application::UpdateMouseDelta()
+{
+    m_mouseDx = 0;
+    m_mouseDy = 0;
+
+    if (GetForegroundWindow() == m_window.GetHwnd() && m_camera.GetMouseLook()) {
+        POINT currentCursor = {};
+        GetCursorPos(&currentCursor);
+
+        m_mouseDx = currentCursor.x - m_prevCursor.x;
+        m_mouseDy = currentCursor.y - m_prevCursor.y;
+
+        m_prevCursor = currentCursor;
+    }
+    else {
+        GetCursorPos(&m_prevCursor);
+    }
+}
+
+float Application::CalculateDeltaTime()
+{
+    LARGE_INTEGER now = {};
+    QueryPerformanceCounter(&now);
+
+    float deltaTime = float(now.QuadPart - m_prevCounter.QuadPart) / float(m_frequency.QuadPart);
+    m_prevCounter = now;
+
+    // デバッグ停止や負荷で跳ねた時の保険
+    if (deltaTime > 0.1f) {
+        deltaTime = 0.1f;
+    }
+
+    return deltaTime;
+}
+
+void Application::Update(float deltaTime)
+{
+    // タイム更新
+    m_time += deltaTime;
+
+    UpdateMouseDelta();
+
+    // カメラ更新
+    m_camera.Update(m_mouseDx, m_mouseDy, deltaTime);
+}
+
+void Application::Render()
+{
+    // ワールド行列を計算
+    XMMATRIX world = XMMatrixIdentity();
+    world *= XMMatrixScaling(1.0f, 1.0f, 1.0f);
+    world *= XMMatrixRotationY(m_time);
+    world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
+    // ビュー行列を計算
+    XMMATRIX view = XMMatrixLookToLH(XMLoadFloat3(&m_camera.GetPosition()), m_camera.GetForward(), XMLoadFloat3(&m_camera.GetUp()));
+    // プロジェクション行列を計算
+    m_camera.SetAspect((float)m_settings.width / (float)m_settings.height);
+    XMMATRIX projection = XMMatrixPerspectiveFovLH(m_camera.GetFovY(), m_camera.GetAspect(), m_camera.GetNearZ(), m_camera.GetFarZ());
+
+    // 転置して保存
+    ConstantPerFrame constantPerFrame = {};
+    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
+    XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
+    XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
+    XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(world * view * projection));
+
+
+    // ライト系
+    constantPerFrame.directional = { 0.0f, -1.0f, 1.0f }; // 光が進む向き
+    constantPerFrame.lightColor = { 1.0f,  1.0f, 1.0f };
+    constantPerFrame.ambient = { 0.3f,  0.3f, 0.3f };
+
+
+    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    ThrowIfFailed(hr, "Map Constant Buffer Failed");
+    memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
+    m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
+
+
+    // 画面クリア
+    const float clearColor[4] = { 0 / 255.0f, 99 / 255.0f, 181 / 255.0f, 1.0f };
+    m_renderer.GetDeviceContext()->ClearRenderTargetView(m_renderer.GetRenderTargetView(), clearColor);
+
+    // 出力先（RTV）をセット
+    ID3D11RenderTargetView* renderTargetView = m_renderer.GetRenderTargetView();
+    m_renderer.GetDeviceContext()->OMSetRenderTargets(1, &renderTargetView, nullptr);
+
+    // シェーダー設定
+    m_shader.Bind(m_renderer);
+    // メッシュ設定
+    m_mesh.Bind(m_renderer);
+    // シェーダーにテクスチャとサンプラーを設定
+    m_texture.Bind(m_renderer);
+
+    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
+
+    // シェーダーに定数バッファを設定（HLSL 側で register(b0) にしたのでスロット 0 に入れる）
+    ID3D11Buffer* constantBuffers[] = { m_renderer.GetConstantBuffer() };
+    m_renderer.GetDeviceContext()->VSSetConstantBuffers(0, 1, constantBuffers);
+    m_renderer.GetDeviceContext()->PSSetConstantBuffers(0, 1, constantBuffers);
+
+    // 描き込み
+    m_renderer.GetDeviceContext()->DrawIndexed(m_mesh.GetIndexCount(), 0, 0);
+
+    // 表示
+    m_renderer.GetSwapChain()->Present(1, 0);
+}
