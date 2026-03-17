@@ -26,4 +26,12 @@
   <ItemGroup>
     <None Include="shaders\BasicShader.hlsli" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Types.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Utility.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

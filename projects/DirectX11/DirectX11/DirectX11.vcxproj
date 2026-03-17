@@ -170,6 +170,10 @@ dxgi.lib
   <ItemGroup>
     <None Include="shaders\BasicShader.hlsli" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Types.h" />
+    <ClInclude Include="src\Utility.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
