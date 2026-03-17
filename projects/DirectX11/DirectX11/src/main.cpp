@@ -19,6 +19,7 @@
 
 #include "Types.h"
 #include "Utility.h"
+#include "Camera.h"
 
 #include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
@@ -49,57 +50,6 @@ struct Shaders
 {
     ComPtr<ID3D11VertexShader> vertexShader;
     ComPtr<ID3D11PixelShader> pixelShader;
-};
-
-
-// カメラ構造体
-struct Camera
-{
-    XMFLOAT3 position  = { 0.0f, 1.0f, -5.0f };
-    XMFLOAT3 up = { 0.0f, 1.0f, 0.0f };
-
-    float fovY = XMConvertToRadians(60.0f);
-    float aspect = 1280.0f / 720.0f;
-    float nearZ = 0.1f;
-    float farZ = 1000.0f;
-
-    float yaw = 0.0f;
-    float pitch = 0.0f;
-
-    float moveSpeed = 3.0f;
-
-    // マウス視点操作
-    bool mouseLook = false;
-    float mouseSensitivity = 0.0025f;
-
-
-    // 真上を向けないようにクランプ
-    static float ClampPitch(float pitch)
-    {
-        const float limit = XMConvertToRadians(89.0f);
-
-        if (pitch > limit) {
-            pitch = limit;
-        }
-        if (pitch < -limit) {
-            pitch = -limit;
-        }
-
-        return pitch;
-    }
-
-    // 前方向取得
-    XMVECTOR GetForward() const
-    {
-        const float cosPitch = cosf(pitch);
-        const float sinPitch = sinf(pitch);
-        const float cosYaw = cosf(yaw);
-        const float sinYaw = sinf(yaw);
-
-        // LH 想定
-        XMVECTOR forward = XMVectorSet(cosPitch * sinYaw, sinPitch, cosPitch * cosYaw, 0.0f);
-        return XMVector3Normalize(forward);
-    }
 };
 
 // OBJファイル用
@@ -560,10 +510,10 @@ static void Render(Dx11Context& dx, const MeshData& meshData, Shaders& shaders, 
     world *= XMMatrixRotationY(time);
     world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
     // ビュー行列を計算
-    XMMATRIX view = XMMatrixLookToLH(XMLoadFloat3(&camera.position), camera.GetForward(), XMLoadFloat3(&camera.up));
+    XMMATRIX view = XMMatrixLookToLH(XMLoadFloat3(&camera.GetPosition()), camera.GetForward(), XMLoadFloat3(&camera.GetUp()));
     // プロジェクション行列を計算
-    camera.aspect = (float)settings.width / (float)settings.height;
-    XMMATRIX projection = XMMatrixPerspectiveFovLH(camera.fovY, camera.aspect, camera.nearZ, camera.farZ);
+    camera.SetAspect((float)settings.width / (float)settings.height);
+    XMMATRIX projection = XMMatrixPerspectiveFovLH(camera.GetFovY(), camera.GetAspect(), camera.GetNearZ(), camera.GetFarZ());
 
     // 転置して保存
     ConstantPerFrame constantPerFrame = {};
@@ -626,58 +576,19 @@ static void Render(Dx11Context& dx, const MeshData& meshData, Shaders& shaders, 
 }
 
 
-// カメラ操作
-static void UpdateCamera(Camera& camera, int mouseDx, int mouseDy, float deltaTime)
-{
-    // 見回し（マウス操作）
-    camera.yaw += mouseDx * camera.mouseSensitivity;
-    camera.pitch += -mouseDy * camera.mouseSensitivity;
-    camera.pitch = camera.ClampPitch(camera.pitch);
-
-    // 移動
-    XMVECTOR position = XMLoadFloat3(&camera.position);
-    XMVECTOR up = XMLoadFloat3(&camera.up);
-    XMVECTOR forward = camera.GetForward();
-    XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
-
-    const float velocity = camera.moveSpeed * deltaTime;
-
-    if (GetAsyncKeyState('W') & 0x8000) {
-        position += forward * velocity;
-    }
-    if (GetAsyncKeyState('S') & 0x8000) {
-        position -= forward * velocity;
-    }
-    if (GetAsyncKeyState('D') & 0x8000) {
-        position += right * velocity;
-    }
-    if (GetAsyncKeyState('A') & 0x8000) {
-        position -= right * velocity;
-    }
-
-    if (GetAsyncKeyState('E') & 0x8000) {
-        position += up * velocity;
-    }
-    if (GetAsyncKeyState('Q') & 0x8000) {
-        position -= up * velocity;
-    }
-
-    XMStoreFloat3(&camera.position, position);
-}
-
-
 // エントリーポイント
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 {
     static const ProjectSettings settings = {
-                .title = L"DirectX11-study",
-                .width = 1280,
-                .height = 720
+        .title = L"DirectX11-study",
+        .width = 1280,
+        .height = 720
     };
     Dx11Context dx = {};
     MeshData meshData = {};
     Shaders shaders = {};
-    Camera camera = {};
+
+    Camera camera;
     
     // COM 初期化
     ThrowIfFailed(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED), "CoInitializeEx failed");
@@ -742,7 +653,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 time += deltaTime;
 
                 // マウス移動量を計算
-                if (GetForegroundWindow() == g_hWnd && camera.mouseLook) {
+                if (GetForegroundWindow() == g_hWnd && camera.GetMouseLook()) {
                     POINT currentCursor = {};
                     GetCursorPos(&currentCursor);
 
@@ -752,7 +663,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                     cursor = currentCursor;
                 }
 
-                UpdateCamera(camera, mouseDx, mouseDy, deltaTime);
+                camera.Update(mouseDx, mouseDy, deltaTime);
                 Render(dx, meshData, shaders, settings, camera, time);
             }
         }
