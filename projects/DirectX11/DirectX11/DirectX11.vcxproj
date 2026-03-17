@@ -138,6 +138,7 @@ dxgi.lib
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ObjLoader.cpp" />
+    <ClCompile Include="src\Window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="shaders\BasicPixelShader.hlsl">
@@ -177,6 +178,7 @@ dxgi.lib
     <ClInclude Include="src\ObjLoader.h" />
     <ClInclude Include="src\Types.h" />
     <ClInclude Include="src\Utility.h" />
+    <ClInclude Include="src\Window.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
