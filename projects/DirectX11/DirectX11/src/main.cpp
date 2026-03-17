@@ -1,23 +1,12 @@
-#include <windows.h>
-#include <d3d11.h>
-#include <dxgi.h>
-#include <DirectXMath.h>
-#include <wrl/client.h>
-
-#include <string>
-#include <cstdint>
 #include <wincodec.h>
 
 #include "Window.h"
 #include "Renderer.h"
+#include "Shader.h"
 #include "Types.h"
 #include "Utility.h"
 #include "Camera.h"
 #include "ObjLoader.h"
-
-#include "BasicVertexShader.h"	// シェーダーをコンパイルしたヘッダーファイル
-#include "BasicPixelShader.h"
-
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -27,14 +16,6 @@
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
-
-
-// シェーダー構造体
-struct Shaders
-{
-    ComPtr<ID3D11VertexShader> vertexShader;
-    ComPtr<ID3D11PixelShader> pixelShader;
-};
 
 
 // VertexBuffer 作成
@@ -74,36 +55,6 @@ static void CreateIndexBuffer(ID3D11Device* device, const MeshData& meshData)
     ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_indexBuffer.GetAddressOf()), "Create Index Buffer Failed");
 }
 
-// VertexShader/PixelShader 作成
-static void CreateShaders(Shaders& shaders, Renderer& renderer)
-{
-    // VertexShader
-    HRESULT hr = renderer.GetDevice()->CreateVertexShader(
-        g_BasicVertexShader, std::size(g_BasicVertexShader), NULL, shaders.vertexShader.GetAddressOf());
-    ThrowIfFailed(hr, "Create VertexShader Failed");
-
-    // PixelShader
-    hr = renderer.GetDevice()->CreatePixelShader(
-        g_BasicPixelShader, std::size(g_BasicPixelShader), NULL, shaders.pixelShader.GetAddressOf());
-    ThrowIfFailed(hr, "Create PixelShader Failed");
-}
-
-// InputLayout 作成
-ComPtr<ID3D11InputLayout> g_inputLayout;
-static void CreateInputLayout(ID3D11Device* device)
-{
-    // HLSL ファイルと同じ形式（セマンティクス）
-    D3D11_INPUT_ELEMENT_DESC layout[] =
-    {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    };
-
-    HRESULT hr = device->CreateInputLayout(layout, _countof(layout),
-        g_BasicVertexShader, std::size(g_BasicVertexShader), &g_inputLayout);   // 生成されたヘッダーファイルを利用してバイトコードなどを渡す
-    ThrowIfFailed(hr, "Create InputLayout Failed");
-}
 
 // Texture作成
 ComPtr<ID3D11ShaderResourceView> g_textureSRV;
@@ -225,7 +176,7 @@ static void CreateSamplerState(ID3D11Device* device)
 
 
 // 描画処理（更新）
-static void Render(Renderer& renderer, const MeshData& meshData, Shaders& shaders, const ProjectSettings& settings, Camera& camera, float time)
+static void Render(Renderer& renderer, const MeshData& meshData, Shader& shader, const ProjectSettings& settings, Camera& camera, float time)
 {
     // ワールド行列を計算
     XMMATRIX world = XMMatrixIdentity();
@@ -268,8 +219,8 @@ static void Render(Renderer& renderer, const MeshData& meshData, Shaders& shader
     ID3D11RenderTargetView* renderTargetView = renderer.GetRenderTargetView();
     renderer.GetDeviceContext()->OMSetRenderTargets(1, &renderTargetView, nullptr);
 
-    // IA（Input Assembler）設定：Layout / VertexBuffer / IndexBuffer / Topology
-    renderer.GetDeviceContext()->IASetInputLayout(g_inputLayout.Get());
+    // Input Assembler・シェーダー設定
+    shader.Bind(renderer);
 
     UINT stride = sizeof(Vertex);
     UINT offset = 0;
@@ -278,10 +229,6 @@ static void Render(Renderer& renderer, const MeshData& meshData, Shaders& shader
     renderer.GetDeviceContext()->IASetIndexBuffer(g_indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
 
     renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
-
-    // シェーダー設定
-    renderer.GetDeviceContext()->VSSetShader(shaders.vertexShader.Get(), nullptr, 0);
-    renderer.GetDeviceContext()->PSSetShader(shaders.pixelShader.Get(), nullptr, 0);
 
     // シェーダーにテクスチャとサンプラーを設定
     renderer.GetDeviceContext()->PSSetShaderResources(0, 1, g_textureSRV.GetAddressOf());
@@ -309,10 +256,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         .height = 720
     };
     MeshData meshData = {};
-    Shaders shaders = {};
 
     Window window;
     Renderer renderer;
+    Shader shader;
     Camera camera;
     
     // COM 初期化
@@ -327,10 +274,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
         // D3D11初期化
         renderer.Initialize(window.GetHwnd(), settings);
 
-        // シェーダー作成
-        CreateShaders(shaders, renderer);
-        // インプットレイアウト作成
-        CreateInputLayout(renderer.GetDevice());
+        // シェーダー・インプットレイアウト作成
+        shader.Initialize(renderer);
 
         // メッシュ作成
         meshData = LoadObj(L"model.obj");
@@ -390,7 +335,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 }
 
                 camera.Update(mouseDx, mouseDy, deltaTime);
-                Render(renderer, meshData, shaders, settings, camera, time);
+                Render(renderer, meshData, shader, settings, camera, time);
             }
         }
         // COM 解除

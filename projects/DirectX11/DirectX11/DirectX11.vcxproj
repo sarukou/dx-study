@@ -139,6 +139,7 @@ dxgi.lib
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ObjLoader.cpp" />
     <ClCompile Include="src\Renderer.cpp" />
+    <ClCompile Include="src\Shader.cpp" />
     <ClCompile Include="src\Window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -178,6 +179,7 @@ dxgi.lib
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\ObjLoader.h" />
     <ClInclude Include="src\Renderer.h" />
+    <ClInclude Include="src\Shader.h" />
     <ClInclude Include="src\Types.h" />
     <ClInclude Include="src\Utility.h" />
     <ClInclude Include="src\Window.h" />
