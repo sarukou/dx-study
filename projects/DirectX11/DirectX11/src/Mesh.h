@@ -23,6 +23,7 @@ private:
     void CreateIndexBuffer(Renderer& renderer, const MeshData& meshData);
 
 private:
+    // COMオブジェクト
     Microsoft::WRL::ComPtr<ID3D11Buffer> m_vertexBuffer;
     Microsoft::WRL::ComPtr<ID3D11Buffer> m_indexBuffer;
     UINT m_indexCount = 0;
