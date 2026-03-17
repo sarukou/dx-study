@@ -3,6 +3,7 @@
 #include "Window.h"
 #include "Renderer.h"
 #include "Shader.h"
+#include "Mesh.h"
 #include "Types.h"
 #include "Utility.h"
 #include "Camera.h"
@@ -16,44 +17,6 @@
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
-
-
-// VertexBuffer 作成
-ComPtr<ID3D11Buffer> g_vertexBuffer;
-static void CreateVertexBuffer(ID3D11Device* device, const MeshData& meshData)
-{
-    // 各設定（どんな用途・性質）
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(Vertex) * meshData.vertices.size());            // バッファーサイズ（バイト数）
-    bufferDesc.Usage = D3D11_USAGE_DEFAULT;             // バッファの使われ方（今回は「 GPU が主に使う」）
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;    // このバッファを何としてパイプラインにバインドするか（頂点バッファ）
-    bufferDesc.CPUAccessFlags = 0;                      // CPU がこのバッファにアクセスできるか（ 0 はできない）
-    bufferDesc.MiscFlags = 0;                           // 特殊な用途の追加フラグ（なし）
-    bufferDesc.StructureByteStride = 0;                 // 特殊フラグの要素サイズ（使わないのでもちろんなし）
-
-    D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = meshData.vertices.data();
-
-    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_vertexBuffer.GetAddressOf()), "Create Vertex Buffer Failed");
-}
-
-// IndexBuffer 作成
-ComPtr<ID3D11Buffer> g_indexBuffer;
-static void CreateIndexBuffer(ID3D11Device* device, const MeshData& meshData)
-{
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * meshData.indices.size());
-    bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-    bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-    bufferDesc.CPUAccessFlags = 0;
-    bufferDesc.MiscFlags = 0;
-    bufferDesc.StructureByteStride = 0;
-
-    D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = meshData.indices.data();
-
-    ThrowIfFailed(device->CreateBuffer(&bufferDesc, &initData, g_indexBuffer.GetAddressOf()), "Create Index Buffer Failed");
-}
 
 
 // Texture作成
@@ -176,7 +139,7 @@ static void CreateSamplerState(ID3D11Device* device)
 
 
 // 描画処理（更新）
-static void Render(Renderer& renderer, const MeshData& meshData, Shader& shader, const ProjectSettings& settings, Camera& camera, float time)
+static void Render(Renderer& renderer, const Mesh& mesh, Shader& shader, const ProjectSettings& settings, Camera& camera, float time)
 {
     // ワールド行列を計算
     XMMATRIX world = XMMatrixIdentity();
@@ -222,11 +185,7 @@ static void Render(Renderer& renderer, const MeshData& meshData, Shader& shader,
     // Input Assembler・シェーダー設定
     shader.Bind(renderer);
 
-    UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-    renderer.GetDeviceContext()->IASetVertexBuffers(0, 1, g_vertexBuffer.GetAddressOf(), &stride, &offset);
-
-    renderer.GetDeviceContext()->IASetIndexBuffer(g_indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+    mesh.Bind(renderer);
 
     renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
 
@@ -240,7 +199,7 @@ static void Render(Renderer& renderer, const MeshData& meshData, Shader& shader,
     renderer.GetDeviceContext()->PSSetConstantBuffers(0, 1, constantBuffers);
 
     // 描き込み
-    renderer.GetDeviceContext()->DrawIndexed(static_cast<UINT>(meshData.indices.size()), 0, 0);
+    renderer.GetDeviceContext()->DrawIndexed(mesh.GetIndexCount(), 0, 0);
 
     // 表示
     renderer.GetSwapChain()->Present(1, 0);
@@ -260,6 +219,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
     Window window;
     Renderer renderer;
     Shader shader;
+    Mesh mesh;
     Camera camera;
     
     // COM 初期化
@@ -279,11 +239,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
 
         // メッシュ作成
         meshData = LoadObj(L"model.obj");
-
-        // 頂点バッファ作成
-        CreateVertexBuffer(renderer.GetDevice(), meshData);
-        // インデックスバッファ作成
-        CreateIndexBuffer(renderer.GetDevice(), meshData);
+        mesh.Initialize(renderer, meshData);
 
         // テクスチャ作成
         CreateTextureFromFile(renderer.GetDevice(), L"test.jpg");
@@ -335,7 +291,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
                 }
 
                 camera.Update(mouseDx, mouseDy, deltaTime);
-                Render(renderer, meshData, shader, settings, camera, time);
+                Render(renderer, mesh, shader, settings, camera, time);
             }
         }
         // COM 解除
