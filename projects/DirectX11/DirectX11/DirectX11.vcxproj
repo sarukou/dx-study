@@ -137,6 +137,7 @@ dxgi.lib
   <ItemGroup>
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\ObjLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="shaders\BasicPixelShader.hlsl">
@@ -173,6 +174,7 @@ dxgi.lib
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Camera.h" />
+    <ClInclude Include="src\ObjLoader.h" />
     <ClInclude Include="src\Types.h" />
     <ClInclude Include="src\Utility.h" />
   </ItemGroup>
