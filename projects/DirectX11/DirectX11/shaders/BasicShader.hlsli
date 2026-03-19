@@ -16,6 +16,7 @@ struct VSInput
     float3 position : POSITION;
     float3 normal   : NORMAL;
     float2 uv       : TEXCOORD;
+    float3 tangent  : TANGENT;
 };
 
 // 頂点データの出力データ
@@ -24,5 +25,6 @@ struct VSOutput
     float4 position : SV_POSITION;  // SV_POSITION はラスタライザに渡す必須の位置
     float3 normal   : NORMAL;
     float2 uv       : TEXCOORD;
+    float3 tangent  : TANGENT;
 };
 

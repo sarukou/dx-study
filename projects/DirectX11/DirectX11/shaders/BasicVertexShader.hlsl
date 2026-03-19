@@ -10,5 +10,7 @@ VSOutput VSMain(VSInput input)
     output.normal = normalize(mul(input.normal, (float3x3) World));
     
     output.uv = input.uv;
+    
+    output.tangent = normalize(mul(input.tangent, (float3x3) World));
 	return output;
 }

@@ -16,5 +16,7 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     
     float3 finalRGB = textureColor.rgb * lighting;
     
+    float3 tangent = normalize(vsOutput.tangent);
+    
     return float4(finalRGB, textureColor.a);
 }
