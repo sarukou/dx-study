@@ -50,4 +50,7 @@ private:
 
     LARGE_INTEGER m_frequency = {};
     LARGE_INTEGER m_prevCounter = {};
+
+    bool m_useNormalMap = true;
+    bool m_prevToggleKey = false;
 };

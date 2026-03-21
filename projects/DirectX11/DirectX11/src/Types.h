@@ -42,6 +42,10 @@ struct ConstantPerFrame
     DirectX::XMFLOAT3 directional; float padding0;
     DirectX::XMFLOAT3 lightColor;  float padding1;
     DirectX::XMFLOAT3 ambient;     float padding2;
+
+    // NormalMap
+    int useNormalMap;
+    DirectX::XMFLOAT3 padding3;
 };
 // デバッグ用
 static_assert((sizeof(ConstantPerFrame) % 16) == 0, "Constant buffer size must be 16-byte aligned.");

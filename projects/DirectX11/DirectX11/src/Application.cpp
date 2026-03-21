@@ -91,6 +91,14 @@ void Application::Update(float deltaTime)
 
     UpdateMouseDelta();
 
+    // NormalMap切り替え
+    bool currentToggleKey = (GetAsyncKeyState('N') & 0x8000) != 0;
+    if (currentToggleKey && !m_prevToggleKey) {
+        m_useNormalMap = !m_useNormalMap;
+        OutputDebugStringA(m_useNormalMap ? "NormalMap ON\n" : "NormalMap OFF\n");
+    }
+    m_prevToggleKey = currentToggleKey;
+
     // カメラ更新
     m_camera.Update(m_mouseDx, m_mouseDy, deltaTime);
 }
@@ -115,11 +123,13 @@ void Application::Render()
     XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
     XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(world * view * projection));
 
-
     // ライト系
-    constantPerFrame.directional = { 0.0f, -1.0f, 1.0f }; // 光が進む向き
+    constantPerFrame.directional = { 1.0f, -1.0f, 1.0f }; // 光が進む向き
     constantPerFrame.lightColor = { 1.0f,  1.0f, 1.0f };
-    constantPerFrame.ambient = { 0.3f,  0.3f, 0.3f };
+    constantPerFrame.ambient = { 0.1f,  0.1f, 0.1f };
+
+    // NormalMap
+    constantPerFrame.useNormalMap = m_useNormalMap ? 1 : 0;
 
 
     // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）

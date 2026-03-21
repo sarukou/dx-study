@@ -8,6 +8,8 @@ cbuffer ConstantBuffer : register(b0)
     float3 Directional; float padding0;     // ディレクショナルライト
     float3 LightColor;  float padding1;     // ライトの色
     float3 Ambient;     float padding2;     // 環境光
+    
+    float UseNormalMap; float3 paddong3;    // NormalMap
 }
 
 // 頂点シェーダーの入力データ
