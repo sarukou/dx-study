@@ -39,7 +39,8 @@ private:
     Renderer m_renderer;
     Shader m_shader;
     Mesh m_mesh;
-    Texture m_texture;
+    Texture m_albedoTexture;
+    Texture m_normalTexture;
     Camera m_camera;
 
     float m_time = 0.0f;

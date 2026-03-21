@@ -19,7 +19,8 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow)
     MeshData meshData = LoadObj(L"model.obj");
     m_mesh.Initialize(m_renderer, meshData);
 
-    m_texture.Initialize(m_renderer, L"test.jpg");
+    m_albedoTexture.Initialize(m_renderer, L"test_albedo.png");
+    m_normalTexture.Initialize(m_renderer, L"test_normal.png");
 
     QueryPerformanceFrequency(&m_frequency);
     QueryPerformanceCounter(&m_prevCounter);
@@ -142,7 +143,8 @@ void Application::Render()
     // メッシュ設定
     m_mesh.Bind(m_renderer);
     // シェーダーにテクスチャとサンプラーを設定
-    m_texture.Bind(m_renderer);
+    m_albedoTexture.Bind(m_renderer, 0);
+    m_normalTexture.Bind(m_renderer, 1);
 
     m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
 
