@@ -35,6 +35,6 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float3 lighting     = Ambient + diffuse;    // 環境光も足す
     
     // テクスチャカラーとライトを掛け合わせる
-    float3 finalRGB = textureColor.rgb * lighting;
+    float3 finalRGB = textureColor.rgb * BaseColor * lighting;
     return float4(finalRGB, textureColor.a);
 }

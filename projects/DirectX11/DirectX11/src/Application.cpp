@@ -131,6 +131,11 @@ void Application::Render()
     // NormalMap
     constantPerFrame.useNormalMap = m_useNormalMap ? 1 : 0;
 
+    // PBRマテリアル
+    constantPerFrame.baseColor = m_baseColor;
+    constantPerFrame.metallic = m_metallic;
+    constantPerFrame.roughness = m_roughness;
+
 
     // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）
     D3D11_MAPPED_SUBRESOURCE mapped = {};

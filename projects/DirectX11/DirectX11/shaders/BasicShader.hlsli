@@ -10,6 +10,10 @@ cbuffer ConstantBuffer : register(b0)
     float3 Ambient;     float padding2;     // 環境光
     
     float UseNormalMap; float3 paddong3;    // NormalMap
+    
+    float3 BaseColor;                   // PBR用
+    float Metallic;
+    float Roughness; float3 padding4;
 }
 
 // 頂点シェーダーの入力データ
