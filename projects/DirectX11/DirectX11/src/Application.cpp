@@ -123,6 +123,9 @@ void Application::Render()
     XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
     XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(world * view * projection));
 
+    // カメラ
+    constantPerFrame.cameraPosition = m_camera.GetPosition();
+ 
     // ライト系
     constantPerFrame.directional = { 1.0f, -1.0f, 1.0f }; // 光が進む向き
     constantPerFrame.lightColor = { 1.0f,  1.0f, 1.0f };

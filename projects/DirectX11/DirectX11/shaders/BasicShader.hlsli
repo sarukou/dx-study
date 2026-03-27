@@ -5,15 +5,17 @@ cbuffer ConstantBuffer : register(b0)
     matrix Projection;              // 透視射影変換行列
     matrix WorldViewProjection;     // WVP行列
     
-    float3 Directional; float padding0;     // ディレクショナルライト
-    float3 LightColor;  float padding1;     // ライトの色
-    float3 Ambient;     float padding2;     // 環境光
+    float3 CameraPosition; float padding0;
     
-    float UseNormalMap; float3 paddong3;    // NormalMap
+    float3 Directional; float padding1;     // ディレクショナルライト
+    float3 LightColor;  float padding2;     // ライトの色
+    float3 Ambient;     float padding3;     // 環境光
+    
+    float UseNormalMap; float3 paddong4;    // NormalMap
     
     float3 BaseColor;                   // PBR用
     float Metallic;
-    float Roughness; float3 padding4;
+    float Roughness; float3 padding5;
 }
 
 // 頂点シェーダーの入力データ
@@ -28,9 +30,10 @@ struct VSInput
 // 頂点データの出力データ
 struct VSOutput
 {
-    float4 position : SV_POSITION;  // SV_POSITION はラスタライザに渡す必須の位置
+    float4 position : SV_POSITION; // SV_POSITION はラスタライザに渡す必須の位置
+    float3 worldPos : TEXCOORD1;
     float3 normal   : NORMAL;
-    float2 uv       : TEXCOORD;
+    float2 uv       : TEXCOORD0;
     float3 tangent  : TANGENT;
 };
 

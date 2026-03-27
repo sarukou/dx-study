@@ -9,6 +9,7 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
 {
     // テクスチャカラー（元の色）
     float4 textureColor = g_albedoTexture.Sample(g_sampler0, vsOutput.uv);
+    float3 albedo = textureColor.rgb * BaseColor;
     
     // 法線
     float3 normal = normalize(vsOutput.normal);
@@ -28,13 +29,26 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     }
     
     // ライト系
-    float3 light  = normalize(-Directional);     // 面→光の合わせる
-    float ndotl = saturate(dot(finalNormal, light));    // 最終的な法線
-    // 拡散反射
-    float3 diffuse = LightColor * ndotl;
-    float3 lighting     = Ambient + diffuse;    // 環境光も足す
+    float3 Normal = normalize(finalNormal);
+    float3 Light  = normalize(-Directional);     // 面→光の合わせる
+    float3 View   = normalize(CameraPosition - vsOutput.worldPos);
+    float3 HalfVector = normalize(Light + View);
+    float NdotL = saturate(dot(Normal, Light));
+    float NdotH = saturate(dot(Normal, HalfVector));
     
-    // テクスチャカラーとライトを掛け合わせる
-    float3 finalRGB = textureColor.rgb * BaseColor * lighting;
+    // 拡散反射
+    float3 diffuse = albedo * LightColor * NdotL;
+    
+    // 簡易Specular
+    float3 specPower = 32.0f;
+    float specStrength = 0.25f;
+    float spec = pow(NdotH, specPower);
+    float3 specular = LightColor * spec * specStrength * NdotL;
+    
+    // 環境光
+    float3 ambient = albedo * Ambient;
+    
+    // 最終的な色
+    float3 finalRGB = ambient + diffuse + specular;
     return float4(finalRGB, textureColor.a);
 }

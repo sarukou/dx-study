@@ -5,6 +5,7 @@ VSOutput VSMain(VSInput input)
 {
     VSOutput output;
     output.position = mul(float4(input.position, 1.0f), WorldViewProjection);
+    output.worldPos = mul(float4(input.position, 1.0f), World);
     
     // ƒ[ƒ‹ƒh‹óŠÔ–@ü
     output.normal = normalize(mul(input.normal, (float3x3) World));
