@@ -5,6 +5,11 @@ Texture2D g_normalTexture : register(t1);
 SamplerState g_sampler0 : register(s0);
 SamplerState g_sampler1 : register(s1);
 
+float3 FresnelSchlick(float cosTheta, float3 F0)
+{
+    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
 float4 PSMain(VSOutput vsOutput) : SV_TARGET
 {
     // テクスチャカラー（元の色）
@@ -35,15 +40,19 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float3 HalfVector = normalize(Light + View);
     float NdotL = saturate(dot(Normal, Light));
     float NdotH = saturate(dot(Normal, HalfVector));
+    float VdotH = saturate(dot(View, HalfVector));
     
     // 拡散反射
     float3 diffuse = albedo * LightColor * NdotL;
     
+    // Fresnel
+    float3 F0 = lerp(float3(0.1f, 0.1f, 0.1f), albedo, Metallic);
+    float3 Fresnel = FresnelSchlick(VdotH, F0);
+    
     // 簡易Specular
     float3 specPower = 32.0f;
-    float specStrength = 0.25f;
     float spec = pow(NdotH, specPower);
-    float3 specular = LightColor * spec * specStrength * NdotL;
+    float3 specular = LightColor * spec * Fresnel *  NdotL;
     
     // 環境光
     float3 ambient = albedo * Ambient;
