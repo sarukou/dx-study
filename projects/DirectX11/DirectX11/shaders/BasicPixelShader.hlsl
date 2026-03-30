@@ -33,28 +33,31 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
         finalNormal = normalize(mul(normalSample, TBN));
     }
     
-    // ライト系
     float3 Normal = normalize(finalNormal);
     float3 Light  = normalize(-Directional);     // 面→光の合わせる
     float3 View   = normalize(CameraPosition - vsOutput.worldPos);
     float3 HalfVector = normalize(Light + View);
+    
     float NdotL = saturate(dot(Normal, Light));
     float NdotH = saturate(dot(Normal, HalfVector));
     float VdotH = saturate(dot(View, HalfVector));
     
-    // 拡散反射
+    // Diffuse
     float3 diffuse = albedo * LightColor * NdotL;
     
     // Fresnel
-    float3 F0 = lerp(float3(0.1f, 0.1f, 0.1f), albedo, Metallic);
+    float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, Metallic);
     float3 Fresnel = FresnelSchlick(VdotH, F0);
     
-    // 簡易Specular
-    float3 specPower = 32.0f;
+    // Roughness
+    float roughness = clamp(Roughness, 0.05f, 1.0f);
+    float specPower = lerp(128.0f, 4.0f, roughness);
+    
+    // Specular
     float spec = pow(NdotH, specPower);
     float3 specular = LightColor * spec * Fresnel *  NdotL;
     
-    // 環境光
+    // Ambient
     float3 ambient = albedo * Ambient;
     
     // 最終的な色

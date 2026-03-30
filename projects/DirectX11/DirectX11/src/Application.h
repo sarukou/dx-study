@@ -56,5 +56,5 @@ private:
 
     DirectX::XMFLOAT3 m_baseColor = { 1.0f, 0.8f, 0.7f };
     float m_metallic = 0.0f;
-    float m_roughness = 0.5f;
+    float m_roughness = 0.1f;
 };

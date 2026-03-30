@@ -28,7 +28,7 @@ private:
     static float ClampPitch(float pitch);
 
 private:
-    DirectX::XMFLOAT3 m_position = { 0.0f, 1.0f, -5.0f };
+    DirectX::XMFLOAT3 m_position = { 0.0f, 0.0f, -3.0f };
     DirectX::XMFLOAT3 m_up = { 0.0f, 1.0f, 0.0f };
 
     float m_fovY = DirectX::XMConvertToRadians(60.0f);
