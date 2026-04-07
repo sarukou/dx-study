@@ -5,9 +5,40 @@ Texture2D g_normalTexture : register(t1);
 SamplerState g_sampler0 : register(s0);
 SamplerState g_sampler1 : register(s1);
 
+
+static const float PI = 3.14159265;
+
+
 float3 FresnelSchlick(float cosTheta, float3 F0)
 {
     return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+float DistributionGGX(float NdotH, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+
+    float NdotH2 = NdotH * NdotH;
+
+    float denom = NdotH2 * (a2 - 1.0f) + 1.0f;
+    return a2 / max(PI * denom * denom, 0.0001f);
+}
+
+float GeometrySchlickGGX(float NdotX, float roughness)
+{
+    float r = roughness + 1.0f;
+    float k = (r * r) / 8.0f;
+
+    return NdotX / max(NdotX * (1.0f - k) + k, 0.0001f);
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    float ggxV = GeometrySchlickGGX(NdotV, roughness);
+    float ggxL = GeometrySchlickGGX(NdotL, roughness);
+
+    return ggxV * ggxL;
 }
 
 float4 PSMain(VSOutput vsOutput) : SV_TARGET
@@ -39,11 +70,12 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float3 HalfVector = normalize(Light + View);
     
     float NdotL = saturate(dot(Normal, Light));
+    float NdotV = saturate(dot(Normal, View));
     float NdotH = saturate(dot(Normal, HalfVector));
     float VdotH = saturate(dot(View, HalfVector));
     
     // Diffuse
-    float3 diffuse = albedo * LightColor * NdotL;
+    float3 diffuse = albedo / PI;
     
     // Fresnel
     float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, Metallic);
@@ -51,16 +83,20 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     
     // Roughness
     float roughness = clamp(Roughness, 0.05f, 1.0f);
-    float specPower = lerp(128.0f, 4.0f, roughness);
     
-    // Specular
-    float spec = pow(NdotH, specPower);
-    float3 specular = LightColor * spec * Fresnel *  NdotL;
+    // GGX + Geometry
+    float Distribution = DistributionGGX(NdotH, roughness);
+    float Geometry = GeometrySmith(NdotV, NdotL, roughness);
+    
+    // Cook-Torrance Specular
+    float3 numerator = Distribution * Fresnel * Geometry;
+    float denominator = max(4.0f * NdotV * NdotL, 0.0001f);
+    float3 specular = numerator / denominator;
     
     // Ambient
     float3 ambient = albedo * Ambient;
     
     // ç≈èIìIÇ»êF
-    float3 finalRGB = ambient + diffuse + specular;
+    float3 finalRGB = ambient + (diffuse + specular) * LightColor * NdotL * 3.25f;
     return float4(finalRGB, textureColor.a);
 }

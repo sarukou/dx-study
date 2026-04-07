@@ -108,7 +108,7 @@ void Application::Render()
     // ワールド行列を計算
     XMMATRIX world = XMMatrixIdentity();
     world *= XMMatrixScaling(1.0f, 1.0f, 1.0f);
-    world *= XMMatrixRotationY(m_time);
+    //world *= XMMatrixRotationY(m_time);
     world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
     // ビュー行列を計算
     XMMATRIX view = XMMatrixLookToLH(XMLoadFloat3(&m_camera.GetPosition()), m_camera.GetForward(), XMLoadFloat3(&m_camera.GetUp()));
@@ -127,9 +127,9 @@ void Application::Render()
     constantPerFrame.cameraPosition = m_camera.GetPosition();
  
     // ライト系
-    constantPerFrame.directional = { 1.0f, -1.0f, 1.0f }; // 光が進む向き
-    constantPerFrame.lightColor = { 1.0f,  1.0f, 1.0f };
-    constantPerFrame.ambient = { 0.1f,  0.1f, 0.1f };
+    constantPerFrame.directional = m_directional; // 光が進む向き
+    constantPerFrame.lightColor = m_lightColor;
+    constantPerFrame.ambient = m_ambient;
 
     // NormalMap
     constantPerFrame.useNormalMap = m_useNormalMap ? 1 : 0;
