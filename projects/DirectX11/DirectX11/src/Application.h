@@ -53,12 +53,20 @@ private:
 
     DirectX::XMFLOAT3 m_directional = { 0.5f, -1.0f, 1.0f };
     DirectX::XMFLOAT3 m_lightColor = { 1.0f,  1.0f, 1.0f };
-    DirectX::XMFLOAT3 m_ambient = { 0.3f,  0.3f, 0.3f };
+    DirectX::XMFLOAT3 m_ambient = { 0.0f,  0.0f, 0.0f };
+
+    DirectX::XMFLOAT3 m_baseColor = { 1.0f, 1.0f, 1.0f };
+    float m_metallic = 0.0f;
+    float m_roughness = 0.1f;
+
+    int m_colorPresetIndex = 0;
+    int m_metallicPresetIndex = 0;
+    int m_roughnessPresetIndex = 0;
 
     bool m_useNormalMap = true;
-    bool m_prevToggleKey = false;
 
-    DirectX::XMFLOAT3 m_baseColor = { 1.0f, 0.8f, 0.7f };
-    float m_metallic = 1.0f;
-    float m_roughness = 0.2f;
+    bool m_prevNKey = false;
+    bool m_prevMKey = false;
+    bool m_prevRKey = false;
+    bool m_prevCKey = false;
 };

@@ -93,11 +93,90 @@ void Application::Update(float deltaTime)
 
     // NormalMapêÿÇËë÷Ç¶
     bool currentToggleKey = (GetAsyncKeyState('N') & 0x8000) != 0;
-    if (currentToggleKey && !m_prevToggleKey) {
+    if (currentToggleKey && !m_prevNKey) {
         m_useNormalMap = !m_useNormalMap;
         OutputDebugStringA(m_useNormalMap ? "NormalMap ON\n" : "NormalMap OFF\n");
     }
-    m_prevToggleKey = currentToggleKey;
+    m_prevNKey = currentToggleKey;
+    // MatellicêÿÇËë÷Ç¶
+    bool currentMKey = (GetAsyncKeyState('M') & 0x8000) != 0;
+    if (currentMKey && !m_prevMKey) {
+        m_metallicPresetIndex = (m_metallicPresetIndex + 1) % 5;
+
+        switch (m_metallicPresetIndex) {
+            case 0: m_metallic = 0.0f;
+                break;
+            case 1: m_metallic = 0.25f;
+                break;
+            case 2: m_metallic = 0.5f;
+                break;
+            case 3: m_metallic = 0.75f;
+                break;
+            case 4: m_metallic = 1.0f;
+                break;
+        }
+        
+        char buffer[128];
+        sprintf_s(buffer, "Metallic = %.2f\n", m_metallic);
+        OutputDebugStringA(buffer);
+    }
+    m_prevMKey = currentMKey;
+    // RoughnessêÿÇËë÷Ç¶
+    bool currentRKey = (GetAsyncKeyState('R') & 0x8000) != 0;
+    if (currentRKey && !m_prevRKey) {
+        m_roughnessPresetIndex = (m_roughnessPresetIndex + 1) % 10;
+
+        switch (m_roughnessPresetIndex) {
+            case 0: m_roughness = 0.1f;
+                break;
+            case 1: m_roughness = 0.2f;
+                break;
+            case 2: m_roughness = 0.3f;
+                break;
+            case 3: m_roughness = 0.4f;
+                break;
+            case 4: m_roughness = 0.5f;
+                break;
+            case 5: m_roughness = 0.6f;
+                break;
+            case 6: m_roughness = 0.7f;
+                break;
+            case 7: m_roughness = 0.8f;
+                break;
+            case 8: m_roughness = 0.9f;
+                break;
+            case 9: m_roughness = 1.0f;
+                break;
+        }
+
+        char buffer[128];
+        sprintf_s(buffer, "Roughness = %.2f\n", m_roughness);
+        OutputDebugStringA(buffer);
+    }
+    m_prevRKey = currentRKey;
+    // BaseColorêÿÇËë÷Ç¶
+    bool currentCKey = (GetAsyncKeyState('C') & 0x8000) != 0;
+    if (currentCKey && !m_prevCKey) {
+        m_colorPresetIndex = (m_colorPresetIndex + 1) % 3;
+
+        switch (m_colorPresetIndex) {
+            case 0: m_baseColor = { 1.0f, 1.0f, 1.0f };     // îí
+                break;
+            case 1: m_baseColor = { 1.0f, 0.2f, 0.2f };     // ê‘ån
+                break;
+            case 2: m_baseColor = { 1.0f, 0.85f, 0.2f };    // â©ån
+                break;
+        }
+
+        char buffer[128];
+        sprintf_s(
+            buffer,
+            "BaseColor = (%.2f, %.2f, %.2f)\n",
+            m_baseColor.x, m_baseColor.y, m_baseColor.z
+        );
+        OutputDebugStringA(buffer);
+    }
+    m_prevCKey = currentCKey;
 
     // ÉJÉÅÉâçXêV
     m_camera.Update(m_mouseDx, m_mouseDy, deltaTime);

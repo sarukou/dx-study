@@ -102,6 +102,6 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float3 ambient = albedo * Ambient;
     
     // ç≈èIìIÇ»êF
-    float3 finalRGB = ambient + (diffuse + specular) * LightColor * NdotL * 2.0f;
+    float3 finalRGB = ambient + (diffuse + specular) * LightColor * NdotL;
     return float4(finalRGB, textureColor.a);
 }
