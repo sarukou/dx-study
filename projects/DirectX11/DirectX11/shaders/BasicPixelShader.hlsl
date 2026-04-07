@@ -74,15 +74,14 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float NdotH = saturate(dot(Normal, HalfVector));
     float VdotH = saturate(dot(View, HalfVector));
     
-    // Diffuse
-    float3 diffuse = albedo / PI;
-    
+    // Roughness
+    float roughness = clamp(Roughness, 0.05f, 1.0f);
+    // Metallic
+    float metallic = saturate(Metallic);
+
     // Fresnel
     float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, Metallic);
     float3 Fresnel = FresnelSchlick(VdotH, F0);
-    
-    // Roughness
-    float roughness = clamp(Roughness, 0.05f, 1.0f);
     
     // GGX + Geometry
     float Distribution = DistributionGGX(NdotH, roughness);
@@ -93,10 +92,16 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     float denominator = max(4.0f * NdotV * NdotL, 0.0001f);
     float3 specular = numerator / denominator;
     
+    // Diffuse（Metallic で Diffuse, Specular 配分を変更）
+    float3 kS = Fresnel;
+    float3 kD = 1.0f - kS;
+    kD *= (1.0f - metallic);
+    float3 diffuse = kD * albedo / PI;
+    
     // Ambient
     float3 ambient = albedo * Ambient;
     
     // 最終的な色
-    float3 finalRGB = ambient + (diffuse + specular) * LightColor * NdotL * 3.25f;
+    float3 finalRGB = ambient + (diffuse + specular) * LightColor * NdotL * 2.0f;
     return float4(finalRGB, textureColor.a);
 }
