@@ -39,8 +39,7 @@ struct ConstantPerFrame
     DirectX::XMFLOAT4X4 worldViewProjectionMatrix;
 
     // カメラ
-    DirectX::XMFLOAT3 cameraPosition;
-    float padding0;
+    DirectX::XMFLOAT3 cameraPosition; float padding0;
 
     // ライト
     DirectX::XMFLOAT3 directional; float padding1;
@@ -48,14 +47,12 @@ struct ConstantPerFrame
     DirectX::XMFLOAT3 ambient;     float padding3;
 
     // NormalMap
-    int useNormalMap;
-    DirectX::XMFLOAT3 padding4;
+    int useNormalMap; DirectX::XMFLOAT3 padding4;
 
     // PBR用マテリアル
     DirectX::XMFLOAT3 baseColor;
     float metallic;
-    float roughness;
-    DirectX::XMFLOAT3 padding5;
+    float roughness; DirectX::XMFLOAT3 padding5;
 };
 // デバッグ用
 static_assert((sizeof(ConstantPerFrame) % 16) == 0, "Constant buffer size must be 16-byte aligned.");

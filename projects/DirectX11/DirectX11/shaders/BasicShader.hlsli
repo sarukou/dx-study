@@ -11,7 +11,7 @@ cbuffer ConstantBuffer : register(b0)
     float3 LightColor;  float padding2;     // ライトの色
     float3 Ambient;     float padding3;     // 環境光
     
-    float UseNormalMap; float3 paddong4;    // NormalMap
+    int UseNormalMap; float3 paddong4;    // NormalMap
     
     float3 BaseColor;                   // PBR用
     float Metallic;
