@@ -28,6 +28,9 @@ DX11 で法線マッピングを追加して細かい凹凸を表現できる状
 Week8
 DX11 で簡易PBR（GGX/Fresnel/Roughness/Metallic）を実装できている状態にする。
 
+Week9
+DX11 でシャドウマップが実装できている状態にする。
+
 
 ## Projects
 
