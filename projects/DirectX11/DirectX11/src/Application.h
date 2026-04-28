@@ -53,7 +53,7 @@ private:
 
     DirectX::XMFLOAT3 m_directional = { 0.5f, -1.0f, 1.0f };
     DirectX::XMFLOAT3 m_lightColor = { 1.0f,  1.0f, 1.0f };
-    DirectX::XMFLOAT3 m_ambient = { 0.0f,  0.0f, 0.0f };
+    DirectX::XMFLOAT3 m_ambient = { 0.3f,  0.3f, 0.3f };
 
     DirectX::XMFLOAT3 m_baseColor = { 1.0f, 1.0f, 1.0f };
     float m_metallic = 0.0f;
