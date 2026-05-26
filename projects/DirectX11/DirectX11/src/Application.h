@@ -28,6 +28,8 @@ private:
     void RenderShadowPass(const DirectX::XMMATRIX& world);
     // MainPass•`‰æ
     void RenderMainPass(const DirectX::XMMATRIX& world, const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection);
+    // DebugShadowMapPass•`‰æ
+    void RenderDebugShadowMapPass();
 
     // ƒ}ƒEƒXˆÚ“®—Ê‚ðŒvŽZ
     void UpdateMouseDelta();

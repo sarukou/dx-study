@@ -35,6 +35,8 @@ public:
     void BeginShadowPass();
     // MainPass開始
     void BeginMainPass(const float clearColor[4]);
+    // ShadowMapデバッグ開始
+    void BeginDebugShadowMapPass();
 
 private:
     // 定数バッファ作成

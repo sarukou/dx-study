@@ -1,3 +1,6 @@
 /BasicVertexShader.h
 /BasicGeometryShader.h
 /BasicPixelShader.h
+/ShadowMapVertexShader.h
+/DebugShadowMapPixelShader.h
+/DebugShadowMapVertexShader.h

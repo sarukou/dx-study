@@ -6,6 +6,8 @@
 #include "BasicVertexShader.h" // シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
 #include "ShadowMapVertexShader.h"
+#include "DebugShadowMapVertexShader.h"
+#include "DebugShadowMapPixelShader.h"
 
 using namespace Microsoft::WRL;
 
@@ -13,6 +15,7 @@ void Shader::Initialize(Renderer& renderer)
 {
     CreateShaders(renderer);
     CreateShadowPassShader(renderer);
+    CreateDebugShadowMapShaders(renderer);
     CreateInputLayout(renderer);
 }
 
@@ -35,6 +38,17 @@ void Shader::CreateShadowPassShader(Renderer& renderer)
     HRESULT hr = renderer.GetDevice()->CreateVertexShader(
         g_ShadowMapVertexShader, std::size(g_ShadowMapVertexShader), NULL, m_shadowMapVertexShader.GetAddressOf());
     ThrowIfFailed(hr, "Create ShadowMap VertexShader Failed");
+}
+
+void Shader::CreateDebugShadowMapShaders(Renderer& renderer)
+{
+    HRESULT hr = renderer.GetDevice()->CreateVertexShader(
+        g_DebugShadowMapVertexShader, std::size(g_DebugShadowMapVertexShader), NULL, m_debugShadowMapVertexShader.GetAddressOf());
+    ThrowIfFailed(hr, "Create DebugShadowMap VertexShader Failed");
+
+    hr = renderer.GetDevice()->CreatePixelShader(
+        g_DebugShadowMapPixelShader, std::size(g_DebugShadowMapPixelShader), NULL, m_debugShadowMapPixelShader.GetAddressOf());
+    ThrowIfFailed(hr, "Create DebugShadowMap PixelShader Failed");
 }
 
 void Shader::CreateInputLayout(Renderer& renderer)
@@ -67,4 +81,12 @@ void Shader::BindShadowPass(Renderer& renderer) const
     renderer.GetDeviceContext()->VSSetShader(m_shadowMapVertexShader.Get(), nullptr, 0);
     // 深度だけを書き込むためPixelShaderは不要
     renderer.GetDeviceContext()->PSSetShader(nullptr, nullptr, 0);
+}
+
+void Shader::BindDebugShadowMap(Renderer& renderer) const
+{
+    // SV_VertexIDだけで矩形を作るためInputLayoutは不要
+    renderer.GetDeviceContext()->IASetInputLayout(nullptr);
+    renderer.GetDeviceContext()->VSSetShader(m_debugShadowMapVertexShader.Get(), nullptr, 0);
+    renderer.GetDeviceContext()->PSSetShader(m_debugShadowMapPixelShader.Get(), nullptr, 0);
 }

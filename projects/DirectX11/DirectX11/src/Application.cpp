@@ -199,6 +199,9 @@ void Application::Render()
     // MainPass //
     RenderMainPass(world, view, projection);
 
+    // DebugShadowMapPass //
+    RenderDebugShadowMapPass();
+
     // 表示 //
     m_renderer.GetSwapChain()->Present(1, 0);
 }
@@ -211,7 +214,9 @@ void Application::RenderShadowPass(const XMMATRIX& world)
 
     // ShadowPass用の定数バッファを作る //
     ConstantPerFrame constantPerFrame = {};
-    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(shadowWorldViewProjection));
+    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
+    XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(shadowWorldViewProjection));
+    XMStoreFloat4x4(&constantPerFrame.lightViewProjectionMatrix, XMMatrixTranspose(lightViewProjection));
 
     // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
     D3D11_MAPPED_SUBRESOURCE mapped = {};
@@ -245,6 +250,8 @@ void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, co
     XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
     XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
     XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(world * view * projection));
+    XMMATRIX lightViewProjection = XMLoadFloat4x4(&m_renderer.GetLightViewProjectionMatrix());
+    XMStoreFloat4x4(&constantPerFrame.lightViewProjectionMatrix, XMMatrixTranspose(lightViewProjection));
 
     // カメラ
     constantPerFrame.cameraPosition = m_camera.GetPosition();
@@ -291,4 +298,31 @@ void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, co
 
     // 描き込み
     m_renderer.GetDeviceContext()->DrawIndexed(m_mesh.GetIndexCount(), 0, 0);
+}
+
+void Application::RenderDebugShadowMapPass()
+{
+    // Debug表示用の出力先をセット
+    m_renderer.BeginDebugShadowMapPass();
+
+    // Debug表示用シェーダーをセット
+    m_shader.BindDebugShadowMap(m_renderer);
+
+    // ShadowMapをt2にセット
+    ID3D11ShaderResourceView* shadowMapSRV = m_renderer.GetShadowMapSRV();
+    m_renderer.GetDeviceContext()->PSSetShaderResources(2, 1, &shadowMapSRV);
+
+    // ShadowMap用Samplerをs2にセット
+    ID3D11SamplerState* shadowSampler = m_renderer.GetShadowSampler();
+    m_renderer.GetDeviceContext()->PSSetSamplers(2, 1, &shadowSampler);
+
+    // VertexBuffer / IndexBuffer は使わない
+    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    // SV_VertexID で 6 頂点を生成して矩形を描く
+    m_renderer.GetDeviceContext()->Draw(6, 0);
+
+    // 後続の Pass で SRV/DSV 衝突しないように外しておく
+    ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
+    m_renderer.GetDeviceContext()->PSSetShaderResources(2, 1, nullSRV);
 }

@@ -170,9 +170,9 @@ void Renderer::CreateLightMatrices()
     XMMATRIX lightView = XMMatrixLookAtLH(lightPosition, sceneCenter, lightUp);
 
     // DirectionalLightのため正射影を使う
-    // 20 * 20 の範囲をライトから見る
+    // 5 * 5 の範囲をライトから見る
     // nearZ = 0.1f farZ = 50.0f
-    XMMATRIX lightProjection = XMMatrixOrthographicLH(20.0f, 20.0f, 0.1f, 50.0f);
+    XMMATRIX lightProjection = XMMatrixOrthographicLH(5.0f, 5.0f, 0.1f, 50.0f);
 
     XMMATRIX lightViewProjection = lightView * lightProjection;
 
@@ -206,6 +206,16 @@ void Renderer::BeginMainPass(const float clearColor[4])
     ID3D11RenderTargetView* renderTargetView = m_renderTargetView.Get();
     m_deviceContext->OMSetRenderTargets(1, &renderTargetView, nullptr);
 
-    // 画面用Viewportに戻す
+    // 通常画面用Viewportに戻す
+    m_deviceContext->RSSetViewports(1, &m_mainViewport);
+}
+
+void Renderer::BeginDebugShadowMapPass()
+{
+    // Debug表示はバックバッファへ描く
+    ID3D11RenderTargetView* renderTargetView = m_renderTargetView.Get();
+    m_deviceContext->OMSetRenderTargets(1, &renderTargetView, nullptr);
+
+    // Debug表示は画面上の一部に書くため、通常画面用Viewportに戻す
     m_deviceContext->RSSetViewports(1, &m_mainViewport);
 }
