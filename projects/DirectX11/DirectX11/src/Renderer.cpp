@@ -172,7 +172,7 @@ void Renderer::CreateLightMatrices()
     // DirectionalLight‚Ì‚½‚ß³Ë‰e‚ğg‚¤
     // 5 * 5 ‚Ì”ÍˆÍ‚ğƒ‰ƒCƒg‚©‚çŒ©‚é
     // nearZ = 0.1f farZ = 50.0f
-    XMMATRIX lightProjection = XMMatrixOrthographicLH(5.0f, 5.0f, 0.1f, 50.0f);
+    XMMATRIX lightProjection = XMMatrixOrthographicLH(30.0f, 30.0f, 0.1f, 50.0f);
 
     XMMATRIX lightViewProjection = lightView * lightProjection;
 

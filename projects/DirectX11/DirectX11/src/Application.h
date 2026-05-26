@@ -36,6 +36,9 @@ private:
     // デルタタイム計算
     float CalculateDeltaTime();
 
+    // 影確認用の床メッシュ作成
+    void CreateFloorMesh();
+
 private:
     ProjectSettings m_settings = {
         .title = L"DirectX11-study",
@@ -46,7 +49,8 @@ private:
     Window m_window;
     Renderer m_renderer;
     Shader m_shader;
-    Mesh m_mesh;
+    Mesh m_objectMesh;
+    Mesh m_floorMesh;
     Texture m_albedoTexture;
     Texture m_normalTexture;
     Camera m_camera;

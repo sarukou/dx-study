@@ -17,7 +17,9 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow)
     m_shader.Initialize(m_renderer);
 
     MeshData meshData = LoadObj(L"model.obj");
-    m_mesh.Initialize(m_renderer, meshData);
+    m_objectMesh.Initialize(m_renderer, meshData);
+
+    CreateFloorMesh();
 
     m_albedoTexture.Initialize(m_renderer, L"test_albedo.png");
     m_normalTexture.Initialize(m_renderer, L"test_normal.png");
@@ -82,6 +84,51 @@ float Application::CalculateDeltaTime()
     }
 
     return deltaTime;
+}
+
+void Application::CreateFloorMesh()
+{
+    MeshData floorData;
+
+    const float size = 10.0f;
+    const float y = -1.0f;
+
+    // XZ平面上の大きい床
+    // normal は上向き、tangent は +X 方向
+    floorData.vertices = {
+        {
+            DirectX::XMFLOAT3(-size, y, -size),
+            DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+            DirectX::XMFLOAT2(0.0f, 0.0f),
+            DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)
+        },
+        {
+            DirectX::XMFLOAT3(-size, y,  size),
+            DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+            DirectX::XMFLOAT2(0.0f, 10.0f),
+            DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)
+        },
+        {
+            DirectX::XMFLOAT3(size, y,  size),
+            DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+            DirectX::XMFLOAT2(10.0f, 10.0f),
+            DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)
+        },
+        {
+            DirectX::XMFLOAT3(size, y, -size),
+            DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+            DirectX::XMFLOAT2(10.0f, 0.0f),
+            DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f)
+        },
+    };
+
+    // 2つの三角形で1枚の床を作る
+    floorData.indices = {
+        0, 1, 2,
+        0, 2, 3
+    };
+
+    m_floorMesh.Initialize(m_renderer, floorData);
 }
 
 void Application::Update(float deltaTime)
@@ -210,72 +257,92 @@ void Application::RenderShadowPass(const XMMATRIX& world)
 {
     // ライト視点のWVPを作る //
     XMMATRIX lightViewProjection = XMLoadFloat4x4(&m_renderer.GetLightViewProjectionMatrix());
-    XMMATRIX shadowWorldViewProjection = world * lightViewProjection;
 
-    // ShadowPass用の定数バッファを作る //
-    ConstantPerFrame constantPerFrame = {};
-    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
-    XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(shadowWorldViewProjection));
-    XMStoreFloat4x4(&constantPerFrame.lightViewProjectionMatrix, XMMatrixTranspose(lightViewProjection));
+    auto updateShadowConstantBuffer = [&](const XMMATRIX& objectWorld)
+    {
+        XMMATRIX shadowWorldViewProjection = world * lightViewProjection;
 
-    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
-    D3D11_MAPPED_SUBRESOURCE mapped = {};
-    HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    ThrowIfFailed(hr, "Map ShadowPass Constant Buffer Failed");
-    memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
-    m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
+        // ShadowPass用の定数バッファを作る //
+        ConstantPerFrame constantPerFrame = {};
+        XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
+        XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(shadowWorldViewProjection));
+        XMStoreFloat4x4(&constantPerFrame.lightViewProjectionMatrix, XMMatrixTranspose(lightViewProjection));
+
+        // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
+        D3D11_MAPPED_SUBRESOURCE mapped = {};
+        HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        ThrowIfFailed(hr, "Map ShadowPass Constant Buffer Failed");
+        memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
+        m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
+    };
 
     // ShadowPass開始 //
     m_renderer.BeginShadowPass();
 
     // ShadowPass用シェーダーを設定
     m_shader.BindShadowPass(m_renderer);
-    // Meshを設定
-    m_mesh.Bind(m_renderer);
-    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);   // 三角形
+
+    // 三角形
+    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // シェーダーに定数バッファを設定（HLSL側で register(b0) にしたのでスロット0 に入れる）
     ID3D11Buffer* constantBuffers[] = { m_renderer.GetConstantBuffer() };
     m_renderer.GetDeviceContext()->VSSetConstantBuffers(0, 1, constantBuffers);     // ShadowPassではVSだけが定数バッファを使う
 
-    // 描き込み （深度だけ描画）
-    m_renderer.GetDeviceContext()->DrawIndexed(m_mesh.GetIndexCount(), 0, 0);
+
+    // 既存モデルをShadowMapに描く //
+    updateShadowConstantBuffer(world);
+    // Meshを設定
+    m_objectMesh.Bind(m_renderer);
+    // 描き込み
+    m_renderer.GetDeviceContext()->DrawIndexed(m_objectMesh.GetIndexCount(), 0, 0);
+
+    // 床もShadowMapに描く //
+    XMMATRIX floorWorld = XMMatrixIdentity();
+    updateShadowConstantBuffer(floorWorld);
+    // Meshを設定
+    m_floorMesh.Bind(m_renderer);
+    // 描き込み
+    m_renderer.GetDeviceContext()->DrawIndexed(m_floorMesh.GetIndexCount(), 0, 0);
 }
 
 void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, const XMMATRIX& projection)
 {
-    // MainPass用ConstantBuffer作成
-    ConstantPerFrame constantPerFrame = {};
-    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
-    XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
-    XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
-    XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(world * view * projection));
     XMMATRIX lightViewProjection = XMLoadFloat4x4(&m_renderer.GetLightViewProjectionMatrix());
-    XMStoreFloat4x4(&constantPerFrame.lightViewProjectionMatrix, XMMatrixTranspose(lightViewProjection));
 
-    // カメラ
-    constantPerFrame.cameraPosition = m_camera.GetPosition();
+    auto updateMainConstantBuffer = [&](const XMMATRIX& objectWorld)
+    {
+        // MainPass用ConstantBuffer作成
+        ConstantPerFrame constantPerFrame = {};
+        XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
+        XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
+        XMStoreFloat4x4(&constantPerFrame.projectionMatrix, XMMatrixTranspose(projection));
+        XMStoreFloat4x4(&constantPerFrame.worldViewProjectionMatrix, XMMatrixTranspose(world * view * projection));
+        XMStoreFloat4x4(&constantPerFrame.lightViewProjectionMatrix, XMMatrixTranspose(lightViewProjection));
 
-    // ライト系
-    constantPerFrame.directional = m_directional; // 光が進む向き
-    constantPerFrame.lightColor = m_lightColor;
-    constantPerFrame.ambient = m_ambient;
+        // カメラ
+        constantPerFrame.cameraPosition = m_camera.GetPosition();
 
-    // NormalMap
-    constantPerFrame.useNormalMap = m_useNormalMap ? 1 : 0;
+        // ライト系
+        constantPerFrame.directional = m_directional; // 光が進む向き
+        constantPerFrame.lightColor = m_lightColor;
+        constantPerFrame.ambient = m_ambient;
 
-    // PBRマテリアル
-    constantPerFrame.baseColor = m_baseColor;
-    constantPerFrame.metallic = m_metallic;
-    constantPerFrame.roughness = m_roughness;
+        // NormalMap
+        constantPerFrame.useNormalMap = m_useNormalMap ? 1 : 0;
 
+        // PBRマテリアル
+        constantPerFrame.baseColor = m_baseColor;
+        constantPerFrame.metallic = m_metallic;
+        constantPerFrame.roughness = m_roughness;
 
-    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
-    D3D11_MAPPED_SUBRESOURCE mapped = {};
-    HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    ThrowIfFailed(hr, "Map MainPass Constant Buffer Failed");
-    memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
-    m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
+        // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
+        D3D11_MAPPED_SUBRESOURCE mapped = {};
+        HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        ThrowIfFailed(hr, "Map MainPass Constant Buffer Failed");
+        memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
+        m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
+    };
 
     // MainPass開始 //
     const float clearColor[4] = { 0 / 255.0f, 99 / 255.0f, 181 / 255.0f, 1.0f };
@@ -283,8 +350,6 @@ void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, co
 
     // シェーダーを設定
     m_shader.Bind(m_renderer);
-    // メッシュを設定
-    m_mesh.Bind(m_renderer);
     // シェーダーにテクスチャとサンプラーを設定
     m_albedoTexture.Bind(m_renderer, 0);
     m_normalTexture.Bind(m_renderer, 1);
@@ -295,15 +360,29 @@ void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, co
     ID3D11SamplerState* shadowSampler = m_renderer.GetShadowSampler();
     m_renderer.GetDeviceContext()->PSSetSamplers(2, 1, &shadowSampler);
 
-    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
+    // 三角形
+    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // シェーダーに定数バッファを設定（HLSL側で register(b0) にしたのでスロット0 に入れる）
     ID3D11Buffer* constantBuffers[] = { m_renderer.GetConstantBuffer() };
     m_renderer.GetDeviceContext()->VSSetConstantBuffers(0, 1, constantBuffers);
     m_renderer.GetDeviceContext()->PSSetConstantBuffers(0, 1, constantBuffers);
 
+
+    // 既存モデルを描画 //
+    updateMainConstantBuffer(world);
+    // メッシュを設定
+    m_objectMesh.Bind(m_renderer);
     // 描き込み
-    m_renderer.GetDeviceContext()->DrawIndexed(m_mesh.GetIndexCount(), 0, 0);
+    m_renderer.GetDeviceContext()->DrawIndexed(m_objectMesh.GetIndexCount(), 0, 0);
+
+    // 床を描画 //
+    XMMATRIX floorWorld = XMMatrixIdentity();
+    updateMainConstantBuffer(floorWorld);
+    // メッシュを設定
+    m_floorMesh.Bind(m_renderer);
+    // 描き込み
+    m_renderer.GetDeviceContext()->DrawIndexed(m_floorMesh.GetIndexCount(), 0, 0);
 }
 
 void Application::RenderDebugShadowMapPass()
