@@ -38,6 +38,9 @@ struct ConstantPerFrame
     DirectX::XMFLOAT4X4 projectionMatrix;
     DirectX::XMFLOAT4X4 worldViewProjectionMatrix;
 
+    // ShadowMap用：ワールド座標をライト空間へ変換する行列
+    DirectX::XMFLOAT4X4 lightViewProjectionMatrix;
+
     // カメラ
     DirectX::XMFLOAT3 cameraPosition; float padding0;
 

@@ -26,12 +26,20 @@ public:
     ID3D11SamplerState* GetShadowSampler() const { return m_shadowSampler.Get(); }
     const D3D11_VIEWPORT& GetShadowViewport() const { return m_shadowViewport; }
 
+    // ライト行列取得
+    const DirectX::XMFLOAT4X4& GetLightViewMatrix() const { return m_lightViewMatrix; }
+    const DirectX::XMFLOAT4X4& GetLightProjectionMatrix() const { return m_lightProjectionMatrix; }
+    const DirectX::XMFLOAT4X4& GetLightViewProjectionMatrix() const { return m_lightViewProjectionMatrix; }
+
 private:
     // 定数バッファ作成
     void CreateConstantBuffer();
 
     // ShadowMap用 Texture / DSV /SRV / Sampler 作成
     void CreateShadowMapResources();
+
+    // ShadowMap用 LightView / LightProjection / LightViewProjection 作成
+    void CreateLightMatrices();
 
 private:
     // COMオブジェクト
@@ -43,11 +51,14 @@ private:
 
     // ShadowMapResource
     static constexpr UINT ShadowMapSize = 2048;
-
     Microsoft::WRL::ComPtr<ID3D11Texture2D>          m_shadowMapTexture;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView>   m_shadowMapDSV;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_shadowMapSRV;
     Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_shadowSampler;
-
     D3D11_VIEWPORT m_shadowViewport{};
+
+    // ShadowMap用ライト行列
+    DirectX::XMFLOAT4X4 m_lightViewMatrix{};
+    DirectX::XMFLOAT4X4 m_lightProjectionMatrix{};
+    DirectX::XMFLOAT4X4 m_lightViewProjectionMatrix{};
 };

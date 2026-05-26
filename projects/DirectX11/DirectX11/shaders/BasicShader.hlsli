@@ -5,6 +5,8 @@ cbuffer ConstantBuffer : register(b0)
     matrix Projection;              // 透視射影変換行列
     matrix WorldViewProjection;     // WVP行列
     
+    matrix LightViewProjection;     // シャドウマップ用行列
+    
     float3 CameraPosition; float padding0;
     
     float3 Directional; float padding1;     // ディレクショナルライト

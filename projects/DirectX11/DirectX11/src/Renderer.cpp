@@ -3,7 +3,7 @@
 #include "Utility.h"
 
 using namespace Microsoft::WRL;
-
+using namespace DirectX;
 
 void Renderer::Initialize(HWND hwnd, const ProjectSettings& settings)
 {
@@ -78,6 +78,7 @@ void Renderer::Initialize(HWND hwnd, const ProjectSettings& settings)
 
     CreateConstantBuffer();
     CreateShadowMapResources();
+    CreateLightMatrices();
 }
 
 void Renderer::CreateConstantBuffer()
@@ -156,4 +157,24 @@ void Renderer::CreateShadowMapResources()
     m_shadowViewport.MaxDepth = 1.0f;
 }
 
+void Renderer::CreateLightMatrices()
+{
+    // DirectionalLight用の仮想ライトカメラを作る //
+    XMVECTOR lightDirection = XMVector3Normalize(XMVectorSet(0.5f, -1.0f, 1.0f, 0.0f));
 
+    XMVECTOR sceneCenter = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    XMVECTOR lightPosition = sceneCenter - lightDirection * 10.0f;
+    XMVECTOR lightUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+    XMMATRIX lightView = XMMatrixLookAtLH(lightPosition, sceneCenter, lightUp);
+
+    // DirectionalLightのため正射影を使う
+    // 20 * 20 の範囲をライトから見る
+    // nearZ = 0.1f farZ = 50.0f
+    XMMATRIX lightProjection = XMMatrixOrthographicLH(20.0f, 20.0f, 0.1f, 50.0f);
+
+    XMMATRIX lightViewProjection = lightView * lightProjection;
+
+    XMStoreFloat4x4(&m_lightViewMatrix, lightView);
+    XMStoreFloat4x4(&m_lightProjectionMatrix, lightProjection);
+    XMStoreFloat4x4(&m_lightViewProjectionMatrix, lightViewProjection);
+}
