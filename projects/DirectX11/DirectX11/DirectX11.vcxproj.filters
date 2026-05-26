@@ -46,6 +46,7 @@
   <ItemGroup>
     <FxCompile Include="shaders\BasicVertexShader.hlsl" />
     <FxCompile Include="shaders\BasicPixelShader.hlsl" />
+    <FxCompile Include="shaders\ShadowMapVertexShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\BasicShader.hlsli" />

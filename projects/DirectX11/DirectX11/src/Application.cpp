@@ -184,18 +184,62 @@ void Application::Update(float deltaTime)
 
 void Application::Render()
 {
-    // ワールド行列を計算
+    // 通常描画用の World / View / Projection を計算 //
     XMMATRIX world = XMMatrixIdentity();
     world *= XMMatrixScaling(1.0f, 1.0f, 1.0f);
     //world *= XMMatrixRotationY(m_time);
     world *= XMMatrixTranslation(0.0f, 0.0f, 0.0f);
-    // ビュー行列を計算
     XMMATRIX view = XMMatrixLookToLH(XMLoadFloat3(&m_camera.GetPosition()), m_camera.GetForward(), XMLoadFloat3(&m_camera.GetUp()));
-    // プロジェクション行列を計算
-    m_camera.SetAspect((float)m_settings.width / (float)m_settings.height);
+    m_camera.SetAspect(static_cast<float>(m_settings.width) / static_cast<float>(m_settings.height));
     XMMATRIX projection = XMMatrixPerspectiveFovLH(m_camera.GetFovY(), m_camera.GetAspect(), m_camera.GetNearZ(), m_camera.GetFarZ());
 
-    // 転置して保存
+    // ShadowPass //
+    RenderShadowPass(world);
+
+    // MainPass //
+    RenderMainPass(world, view, projection);
+
+    // 表示 //
+    m_renderer.GetSwapChain()->Present(1, 0);
+}
+
+void Application::RenderShadowPass(const XMMATRIX& world)
+{
+    // ライト視点のWVPを作る //
+    XMMATRIX lightViewProjection = XMLoadFloat4x4(&m_renderer.GetLightViewProjectionMatrix());
+    XMMATRIX shadowWorldViewProjection = world * lightViewProjection;
+
+    // ShadowPass用の定数バッファを作る //
+    ConstantPerFrame constantPerFrame = {};
+    XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(shadowWorldViewProjection));
+
+    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    ThrowIfFailed(hr, "Map ShadowPass Constant Buffer Failed");
+    memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
+    m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
+
+    // ShadowPass開始 //
+    m_renderer.BeginShadowPass();
+
+    // ShadowPass用シェーダーを設定
+    m_shader.BindShadowPass(m_renderer);
+    // Meshを設定
+    m_mesh.Bind(m_renderer);
+    m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);   // 三角形
+
+    // シェーダーに定数バッファを設定（HLSL側で register(b0) にしたのでスロット0 に入れる）
+    ID3D11Buffer* constantBuffers[] = { m_renderer.GetConstantBuffer() };
+    m_renderer.GetDeviceContext()->VSSetConstantBuffers(0, 1, constantBuffers);     // ShadowPassではVSだけが定数バッファを使う
+
+    // 描き込み （深度だけ描画）
+    m_renderer.GetDeviceContext()->DrawIndexed(m_mesh.GetIndexCount(), 0, 0);
+}
+
+void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, const XMMATRIX& projection)
+{
+    // MainPass用ConstantBuffer作成
     ConstantPerFrame constantPerFrame = {};
     XMStoreFloat4x4(&constantPerFrame.worldMatrix, XMMatrixTranspose(world));
     XMStoreFloat4x4(&constantPerFrame.viewMatrix, XMMatrixTranspose(view));
@@ -204,7 +248,7 @@ void Application::Render()
 
     // カメラ
     constantPerFrame.cameraPosition = m_camera.GetPosition();
- 
+
     // ライト系
     constantPerFrame.directional = m_directional; // 光が進む向き
     constantPerFrame.lightColor = m_lightColor;
@@ -219,25 +263,20 @@ void Application::Render()
     constantPerFrame.roughness = m_roughness;
 
 
-    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）
+    // 定数バッファに書き込み（前の内容を捨てて新しい内容で全部上書き）//
     D3D11_MAPPED_SUBRESOURCE mapped = {};
     HRESULT hr = m_renderer.GetDeviceContext()->Map(m_renderer.GetConstantBuffer(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    ThrowIfFailed(hr, "Map Constant Buffer Failed");
+    ThrowIfFailed(hr, "Map MainPass Constant Buffer Failed");
     memcpy(mapped.pData, &constantPerFrame, sizeof(constantPerFrame));
     m_renderer.GetDeviceContext()->Unmap(m_renderer.GetConstantBuffer(), 0);
 
-
-    // 画面クリア
+    // MainPass開始 //
     const float clearColor[4] = { 0 / 255.0f, 99 / 255.0f, 181 / 255.0f, 1.0f };
-    m_renderer.GetDeviceContext()->ClearRenderTargetView(m_renderer.GetRenderTargetView(), clearColor);
+    m_renderer.BeginMainPass(clearColor);
 
-    // 出力先（RTV）をセット
-    ID3D11RenderTargetView* renderTargetView = m_renderer.GetRenderTargetView();
-    m_renderer.GetDeviceContext()->OMSetRenderTargets(1, &renderTargetView, nullptr);
-
-    // シェーダー設定
+    // シェーダーを設定
     m_shader.Bind(m_renderer);
-    // メッシュ設定
+    // メッシュを設定
     m_mesh.Bind(m_renderer);
     // シェーダーにテクスチャとサンプラーを設定
     m_albedoTexture.Bind(m_renderer, 0);
@@ -245,14 +284,11 @@ void Application::Render()
 
     m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
 
-    // シェーダーに定数バッファを設定（HLSL 側で register(b0) にしたのでスロット 0 に入れる）
+    // シェーダーに定数バッファを設定（HLSL側で register(b0) にしたのでスロット0 に入れる）
     ID3D11Buffer* constantBuffers[] = { m_renderer.GetConstantBuffer() };
     m_renderer.GetDeviceContext()->VSSetConstantBuffers(0, 1, constantBuffers);
     m_renderer.GetDeviceContext()->PSSetConstantBuffers(0, 1, constantBuffers);
 
     // 描き込み
     m_renderer.GetDeviceContext()->DrawIndexed(m_mesh.GetIndexCount(), 0, 0);
-
-    // 表示
-    m_renderer.GetSwapChain()->Present(1, 0);
 }

@@ -5,12 +5,14 @@
 
 #include "BasicVertexShader.h" // シェーダーをコンパイルしたヘッダーファイル
 #include "BasicPixelShader.h"
+#include "ShadowMapVertexShader.h"
 
 using namespace Microsoft::WRL;
 
 void Shader::Initialize(Renderer& renderer)
 {
     CreateShaders(renderer);
+    CreateShadowPassShader(renderer);
     CreateInputLayout(renderer);
 }
 
@@ -25,6 +27,14 @@ void Shader::CreateShaders(Renderer& renderer)
     hr = renderer.GetDevice()->CreatePixelShader(
         g_BasicPixelShader, std::size(g_BasicPixelShader), NULL, m_pixelShader.GetAddressOf());
     ThrowIfFailed(hr, "Create PixelShader Failed");
+}
+
+void Shader::CreateShadowPassShader(Renderer& renderer)
+{
+    // VertexShader
+    HRESULT hr = renderer.GetDevice()->CreateVertexShader(
+        g_ShadowMapVertexShader, std::size(g_ShadowMapVertexShader), NULL, m_shadowMapVertexShader.GetAddressOf());
+    ThrowIfFailed(hr, "Create ShadowMap VertexShader Failed");
 }
 
 void Shader::CreateInputLayout(Renderer& renderer)
@@ -48,4 +58,13 @@ void Shader::Bind(Renderer& renderer) const
     renderer.GetDeviceContext()->IASetInputLayout(m_inputLayout.Get());
     renderer.GetDeviceContext()->VSSetShader(m_vertexShader.Get(), nullptr, 0);
     renderer.GetDeviceContext()->PSSetShader(m_pixelShader.Get(), nullptr, 0);
+}
+
+void Shader::BindShadowPass(Renderer& renderer) const
+{
+    renderer.GetDeviceContext()->IASetInputLayout(m_inputLayout.Get());
+    // ShadowPassでは専用VSを使う
+    renderer.GetDeviceContext()->VSSetShader(m_shadowMapVertexShader.Get(), nullptr, 0);
+    // 深度だけを書き込むためPixelShaderは不要
+    renderer.GetDeviceContext()->PSSetShader(nullptr, nullptr, 0);
 }

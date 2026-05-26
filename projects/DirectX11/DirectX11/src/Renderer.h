@@ -31,6 +31,11 @@ public:
     const DirectX::XMFLOAT4X4& GetLightProjectionMatrix() const { return m_lightProjectionMatrix; }
     const DirectX::XMFLOAT4X4& GetLightViewProjectionMatrix() const { return m_lightViewProjectionMatrix; }
 
+    // ShadowPass開始
+    void BeginShadowPass();
+    // MainPass開始
+    void BeginMainPass(const float clearColor[4]);
+
 private:
     // 定数バッファ作成
     void CreateConstantBuffer();
@@ -55,10 +60,13 @@ private:
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView>   m_shadowMapDSV;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_shadowMapSRV;
     Microsoft::WRL::ComPtr<ID3D11SamplerState>       m_shadowSampler;
-    D3D11_VIEWPORT m_shadowViewport{};
 
     // ShadowMap用ライト行列
     DirectX::XMFLOAT4X4 m_lightViewMatrix{};
     DirectX::XMFLOAT4X4 m_lightProjectionMatrix{};
     DirectX::XMFLOAT4X4 m_lightViewProjectionMatrix{};
+
+    // ViewPort
+    D3D11_VIEWPORT m_mainViewport{};
+    D3D11_VIEWPORT m_shadowViewport{};
 };

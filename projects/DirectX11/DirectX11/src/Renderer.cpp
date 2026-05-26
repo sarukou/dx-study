@@ -69,12 +69,14 @@ void Renderer::Initialize(HWND hwnd, const ProjectSettings& settings)
     m_deviceContext->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
 
     // ビューポート設定（クリップ空間の結果を画面上のどの領域に写すか）
-    D3D11_VIEWPORT viewPort = {};
-    viewPort.Width = (float)settings.width;
-    viewPort.Height = (float)settings.height;
-    viewPort.MinDepth = 0.0f;
-    viewPort.MaxDepth = 1.0f;
-    m_deviceContext->RSSetViewports(1, &viewPort);
+    m_mainViewport = {};
+    m_mainViewport.TopLeftX = 0.0f;
+    m_mainViewport.TopLeftY = 0.0f;
+    m_mainViewport.Width = static_cast<float>(settings.width);
+    m_mainViewport.Height = static_cast<float>(settings.height);
+    m_mainViewport.MinDepth = 0.0f;
+    m_mainViewport.MaxDepth = 1.0f;
+    m_deviceContext->RSSetViewports(1, &m_mainViewport);
 
     CreateConstantBuffer();
     CreateShadowMapResources();
@@ -177,4 +179,33 @@ void Renderer::CreateLightMatrices()
     XMStoreFloat4x4(&m_lightViewMatrix, lightView);
     XMStoreFloat4x4(&m_lightProjectionMatrix, lightProjection);
     XMStoreFloat4x4(&m_lightViewProjectionMatrix, lightViewProjection);
+}
+
+void Renderer::BeginShadowPass()
+{
+    // ShadowMapをSRVとしてバインドしていた場合に備えて外す
+    ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
+    m_deviceContext->PSSetShaderResources(2, 1, nullSRV);
+
+    // ShaderMap用DSVをクリア
+    m_deviceContext->ClearDepthStencilView(m_shadowMapDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+    // RenderTargetは使わず、DepthStencilViewだけをセット（ShadowPassでは色を書かないためRTVは不要）
+    m_deviceContext->OMSetRenderTargets(0, nullptr, m_shadowMapDSV.Get());
+
+    // ShadowMapの解像度に合わせたViewportに切り替える
+    m_deviceContext->RSSetViewports(1, &m_shadowViewport);
+}
+
+void Renderer::BeginMainPass(const float clearColor[4])
+{
+    // 画面用RTVをクリア
+    m_deviceContext->ClearRenderTargetView(m_renderTargetView.Get(), clearColor);
+
+    // 通常描画用のRTVをセット
+    ID3D11RenderTargetView* renderTargetView = m_renderTargetView.Get();
+    m_deviceContext->OMSetRenderTargets(1, &renderTargetView, nullptr);
+
+    // 画面用Viewportに戻す
+    m_deviceContext->RSSetViewports(1, &m_mainViewport);
 }

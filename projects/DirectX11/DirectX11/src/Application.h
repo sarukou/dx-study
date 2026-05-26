@@ -21,8 +21,14 @@ public:
 private:
     // 更新処理
     void Update(float deltaTime);
+
     // 描画処理
     void Render();
+    // ShadowPass描画
+    void RenderShadowPass(const DirectX::XMMATRIX& world);
+    // MainPass描画
+    void RenderMainPass(const DirectX::XMMATRIX& world, const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection);
+
     // マウス移動量を計算
     void UpdateMouseDelta();
     // デルタタイム計算
