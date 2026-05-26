@@ -77,6 +77,7 @@ void Renderer::Initialize(HWND hwnd, const ProjectSettings& settings)
     m_deviceContext->RSSetViewports(1, &viewPort);
 
     CreateConstantBuffer();
+    CreateShadowMapResources();
 }
 
 void Renderer::CreateConstantBuffer()
@@ -90,6 +91,69 @@ void Renderer::CreateConstantBuffer()
     bufferDesc.StructureByteStride = 0;
 
     ThrowIfFailed(m_device->CreateBuffer(&bufferDesc, nullptr, m_constantBuffer.GetAddressOf()), "Create Constant Buffer Failed");
+}
+
+void Renderer::CreateShadowMapResources()
+{
+    // ShadowMap本体のTexture2Dを作成 //
+    D3D11_TEXTURE2D_DESC textureDesc = {};
+    textureDesc.Width = ShadowMapSize;
+    textureDesc.Height = ShadowMapSize;
+    textureDesc.MipLevels = 1;
+    textureDesc.ArraySize = 1;
+    textureDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;    // DSVとSRVの両方から使えるようにTYPELESS
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.SampleDesc.Quality = 0;
+    textureDesc.Usage = D3D11_USAGE_DEFAULT;
+    textureDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;  // ShadowPassではDSとして書き込み、MainPassではSRとして読み込む
+    textureDesc.CPUAccessFlags = 0;
+    textureDesc.MiscFlags = 0;
+
+    ThrowIfFailed(m_device->CreateTexture2D(&textureDesc, nullptr, m_shadowMapTexture.ReleaseAndGetAddressOf()), "Create ShadowMap Texture Failed");
+
+    // ShadowMap用DepthStencilViewを作成 //
+    D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Texture2D.MipSlice = 0;
+
+    ThrowIfFailed(m_device->CreateDepthStencilView(m_shadowMapTexture.Get(), &dsvDesc, m_shadowMapDSV.ReleaseAndGetAddressOf()), "Create ShadowMap DSV Failed");
+
+    // ShadowMap用ShaderResourceViewを作成 //
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    ThrowIfFailed(m_device->CreateShaderResourceView(m_shadowMapTexture.Get(), &srvDesc, m_shadowMapSRV.ReleaseAndGetAddressOf()), "Create ShadowMap SRV Failed");
+
+    // ShadowMap用SamplerStateを作成 //
+    D3D11_SAMPLER_DESC samplerDesc = {};
+    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT; // 範囲外を読んだ場合は BorderColor を返す
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+    samplerDesc.BorderColor[0] = 1.0f;
+    samplerDesc.BorderColor[1] = 1.0f;
+    samplerDesc.BorderColor[2] = 1.0f;
+    samplerDesc.BorderColor[3] = 1.0f;
+    samplerDesc.MipLODBias = 0.0f;
+    samplerDesc.MaxAnisotropy = 1;
+    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    samplerDesc.MinLOD = 0.0f;
+    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+
+    ThrowIfFailed(m_device->CreateSamplerState(&samplerDesc, m_shadowSampler.ReleaseAndGetAddressOf()), "Create ShadowMap Sampler Failed");
+
+    // ShadowMap用Viewportを作成
+    m_shadowViewport.TopLeftX = 0.0f;
+    m_shadowViewport.TopLeftY = 0.0f;
+    m_shadowViewport.Width = static_cast<float>(ShadowMapSize);
+    m_shadowViewport.Height = static_cast<float>(ShadowMapSize);
+    m_shadowViewport.MinDepth = 0.0f;
+    m_shadowViewport.MaxDepth = 1.0f;
 }
 
 
