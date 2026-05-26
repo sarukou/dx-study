@@ -32,10 +32,12 @@ struct VSInput
 // 頂点データの出力データ
 struct VSOutput
 {
-    float4 position : SV_POSITION; // SV_POSITION はラスタライザに渡す必須の位置
+    float4 position : SV_POSITION;      // 通常カメラから見たクリップ空間座標
     float3 worldPos : TEXCOORD1;
     float3 normal   : NORMAL;
     float2 uv       : TEXCOORD0;
     float3 tangent  : TANGENT;
+    float4 lightClipPos : TEXCOORD2;    // ShadowMap用：ワールド座標をライト視点のクリップ空間に変換した値
+
 };
 
