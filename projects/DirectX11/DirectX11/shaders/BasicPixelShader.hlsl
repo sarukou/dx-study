@@ -2,8 +2,11 @@
 
 Texture2D g_albedoTexture : register(t0);
 Texture2D g_normalTexture : register(t1);
-SamplerState g_sampler0 : register(s0);
-SamplerState g_sampler1 : register(s1);
+Texture2D g_shadowMapTexture : register(t2);
+
+SamplerState g_albedoSampler : register(s0);
+SamplerState g_normalSampler : register(s1);
+SamplerState g_shadowMapSampler : register(s2);
 
 
 static const float PI = 3.14159265;
@@ -41,10 +44,41 @@ float GeometrySmith(float NdotV, float NdotL, float roughness)
     return ggxV * ggxL;
 }
 
+float CalculateShadow(float4 lightClipPos)
+{   
+    // ライト視点のクリップ空間座標をNDCに変換
+    float3 projCoords = lightClipPos.xyz / lightClipPos.w;  // DirectXのNDC： x: -1 ~ 1 / y: -1 ~ 1 / z: 0 ~ 1
+    
+    float2 shadowUV;    // ShadowMapのUV： u: 0 ~ 1 / v: 0 ~ 1
+    shadowUV.x = projCoords.x * 0.5f + 0.5f;
+    shadowUV.y = -projCoords.y * 0.5f + 0.5f;
+    
+    // ShadowMapの範囲外なら影なし
+    if (shadowUV.x < 0.0f || shadowUV.x > 1.0f ||
+        shadowUV.y < 0.0f || shadowUV.y > 1.0f ||
+        projCoords.z < 0.0f || projCoords.z > 1.0f)
+    {
+        return 1.0f;
+    }
+    
+    // ShadowMapに保存されている「ライトから見た最前面の深度」
+    float closestDepth = g_shadowMapTexture.Sample(g_shadowMapSampler, shadowUV).r;
+    
+    // 今描画しているピクセルの「ライトから見た深度」
+    float currentDepth = projCoords.z;
+    
+    if (currentDepth > closestDepth)
+    {
+        return 0.35f; // 影にする
+    }
+    
+    return 1.0f; //光が当たっている
+}
+
 float4 PSMain(VSOutput vsOutput) : SV_TARGET
 {
     // テクスチャカラー（元の色）
-    float4 textureColor = g_albedoTexture.Sample(g_sampler0, vsOutput.uv);
+    float4 textureColor = g_albedoTexture.Sample(g_albedoSampler, vsOutput.uv);
     float3 albedo = textureColor.rgb * BaseColor;
     
     // 法線
@@ -54,7 +88,7 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     // 法線マップを使うか
     if (UseNormalMap != 0)
     {
-        float3 normalSample = g_normalTexture.Sample(g_sampler1, vsOutput.uv).rgb;
+        float3 normalSample = g_normalTexture.Sample(g_normalSampler, vsOutput.uv).rgb;
         normalSample = normalSample * 2.0f - 1.0f;
         
         float3 tangent = normalize(vsOutput.tangent);
@@ -101,7 +135,14 @@ float4 PSMain(VSOutput vsOutput) : SV_TARGET
     // Ambient
     float3 ambient = albedo * Ambient;
     
+    // ShadowMapによる影係数
+    float shadow = CalculateShadow(vsOutput.lightClipPos);
+    
+    // DirectLight成分
+    float directLighting = (diffuse + specular) * LightColor * NdotL;
+    
     // 最終的な色
-    float3 finalRGB = ambient + (diffuse + specular) * LightColor * NdotL;
+    // 影の中でも環境光は届いている扱いにするため ambientには掛けない
+    float3 finalRGB = ambient + shadow * directLighting;
     return float4(finalRGB, textureColor.a);
 }

@@ -289,6 +289,12 @@ void Application::RenderMainPass(const XMMATRIX& world, const XMMATRIX& view, co
     m_albedoTexture.Bind(m_renderer, 0);
     m_normalTexture.Bind(m_renderer, 1);
 
+    // ShadowMapをPixelShaderに渡す
+    ID3D11ShaderResourceView* shadowMapSRV = m_renderer.GetShadowMapSRV();
+    m_renderer.GetDeviceContext()->PSSetShaderResources(2, 1, &shadowMapSRV);
+    ID3D11SamplerState* shadowSampler = m_renderer.GetShadowSampler();
+    m_renderer.GetDeviceContext()->PSSetSamplers(2, 1, &shadowSampler);
+
     m_renderer.GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);    // 三角形
 
     // シェーダーに定数バッファを設定（HLSL側で register(b0) にしたのでスロット0 に入れる）
