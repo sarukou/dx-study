@@ -54,6 +54,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D11DeviceContext>    m_deviceContext;         // 作ったリソースを使って描画命令を発行する
     Microsoft::WRL::ComPtr<IDXGISwapChain>         m_swapChain;             // 画面に出すための表裏（バックバッファ）の入れ替え役
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_renderTargetView;      // 書き込み先の窓口（バックバッファに直接は書かず View を作ってOMに渡す）
+    Microsoft::WRL::ComPtr<ID3D11Texture2D>        m_depthStencilBuffer;    // 通常描画用DepthStencil本体
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_depthStencilView;      // 通常描画用DepthStencilView
     Microsoft::WRL::ComPtr<ID3D11Buffer>           m_constantBuffer;        // 定数バッファ
 
     // ShadowMapResource

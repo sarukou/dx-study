@@ -65,8 +65,34 @@ void Renderer::Initialize(HWND hwnd, const ProjectSettings& settings)
     hr = m_device->CreateRenderTargetView(backBuffer.Get(), nullptr, m_renderTargetView.ReleaseAndGetAddressOf());
     ThrowIfFailed(hr, "Create RenderTargetView Failed");
 
+    // DepthStencilBuffer 作成
+    D3D11_TEXTURE2D_DESC depthDesc = {};
+    depthDesc.Width = settings.width;
+    depthDesc.Height = settings.height;
+    depthDesc.MipLevels = 1;
+    depthDesc.ArraySize = 1;
+    depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthDesc.SampleDesc.Count = 1;
+    depthDesc.SampleDesc.Quality = 0;
+    depthDesc.Usage = D3D11_USAGE_DEFAULT;
+    depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    depthDesc.CPUAccessFlags = 0;
+    depthDesc.MiscFlags = 0;
+
+    hr = m_device->CreateTexture2D(&depthDesc, nullptr, m_depthStencilBuffer.ReleaseAndGetAddressOf());
+    ThrowIfFailed(hr,"Create Main DepthStencilBuffer Failed");
+
+    // 通常描画用 DepthStencilView を作成
+    D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+    dsvDesc.Format = depthDesc.Format;
+    dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Texture2D.MipSlice = 0;
+    
+    hr = m_device->CreateDepthStencilView(m_depthStencilBuffer.Get(), &dsvDesc, m_depthStencilView.ReleaseAndGetAddressOf());
+    ThrowIfFailed(hr,"Create Main DepthStencilView Failed");
+
     // OM に出力先（RTV）を設定
-    m_deviceContext->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
+    m_deviceContext->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), m_depthStencilView.Get());
 
     // ビューポート設定（クリップ空間の結果を画面上のどの領域に写すか）
     m_mainViewport = {};
@@ -172,7 +198,7 @@ void Renderer::CreateLightMatrices()
     // DirectionalLightのため正射影を使う
     // 5 * 5 の範囲をライトから見る
     // nearZ = 0.1f farZ = 50.0f
-    XMMATRIX lightProjection = XMMatrixOrthographicLH(30.0f, 30.0f, 0.1f, 50.0f);
+    XMMATRIX lightProjection = XMMatrixOrthographicLH(5.0f, 5.0f, 0.1f, 50.0f);
 
     XMMATRIX lightViewProjection = lightView * lightProjection;
 
@@ -202,9 +228,11 @@ void Renderer::BeginMainPass(const float clearColor[4])
     // 画面用RTVをクリア
     m_deviceContext->ClearRenderTargetView(m_renderTargetView.Get(), clearColor);
 
+    // 通常描画用DepthStencilをクリア
+    m_deviceContext->ClearDepthStencilView(m_depthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
     // 通常描画用のRTVをセット
-    ID3D11RenderTargetView* renderTargetView = m_renderTargetView.Get();
-    m_deviceContext->OMSetRenderTargets(1, &renderTargetView, nullptr);
+    m_deviceContext->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), m_depthStencilView.Get());
 
     // 通常画面用Viewportに戻す
     m_deviceContext->RSSetViewports(1, &m_mainViewport);
